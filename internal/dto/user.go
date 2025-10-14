@@ -2,6 +2,8 @@ package dto
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // User DTOs
@@ -14,6 +16,7 @@ type CreateUserRequest struct {
 	DateOfBirth *time.Time `json:"date_of_birth,omitempty"`
 	Phone       *string    `json:"phone" validate:"omitempty,max=20"`
 	Address     *string    `json:"address,omitempty"`
+	RoleID      *uuid.UUID `json:"role_id,omitempty"`
 	IsActive    *bool      `json:"is_active,omitempty"`
 }
 
@@ -24,10 +27,12 @@ type UpdateUserRequest struct {
 	DateOfBirth *time.Time `json:"date_of_birth,omitempty"`
 	Phone       *string    `json:"phone" validate:"omitempty,max=20"`
 	Address     *string    `json:"address,omitempty"`
+	RoleID      *uuid.UUID `json:"role_id,omitempty"`
 	IsActive    *bool      `json:"is_active,omitempty"`
 }
 
 type UserQueryParams struct {
 	QueryParams
-	IsActive *bool `query:"is_active"`
+	RoleID   *uuid.UUID `query:"role_id"`
+	IsActive *bool      `query:"is_active"`
 }

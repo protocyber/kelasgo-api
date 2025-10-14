@@ -22,18 +22,24 @@ type UserService interface {
 
 // userService implements UserService
 type userService struct {
-	userRepo repository.UserRepository
-	roleRepo repository.RoleRepository
+	userRepo       repository.UserRepository
+	roleRepo       repository.RoleRepository
+	tenantUserRepo repository.TenantUserRepository
+	userRoleRepo   repository.UserRoleRepository
 }
 
 // NewUserService creates a new user service
 func NewUserService(
 	userRepo repository.UserRepository,
 	roleRepo repository.RoleRepository,
+	tenantUserRepo repository.TenantUserRepository,
+	userRoleRepo repository.UserRoleRepository,
 ) UserService {
 	return &userService{
-		userRepo: userRepo,
-		roleRepo: roleRepo,
+		userRepo:       userRepo,
+		roleRepo:       roleRepo,
+		tenantUserRepo: tenantUserRepo,
+		userRoleRepo:   userRoleRepo,
 	}
 }
 
@@ -68,8 +74,6 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 
 	// Create user
 	user := &model.User{
-		TenantID:     tenantID,
-		RoleID:       req.RoleID,
 		Username:     req.Username,
 		PasswordHash: hashedPassword,
 		Email:        req.Email,
@@ -90,6 +94,36 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 		return nil, errors.New("failed to create user")
 	}
 
+	// Create tenant-user relationship
+	tenantUser := &model.TenantUser{
+		TenantID: tenantID,
+		UserID:   user.ID,
+		IsActive: user.IsActive,
+	}
+
+	err = s.tenantUserRepo.Create(tenantUser)
+	if err != nil {
+		// If tenant-user creation fails, we should delete the user to maintain consistency
+		s.userRepo.Delete(user.ID)
+		return nil, errors.New("failed to create tenant-user relationship")
+	}
+
+	// Create user-role relationship if role is provided
+	if req.RoleID != nil {
+		userRole := &model.UserRole{
+			UserID: user.ID,
+			RoleID: *req.RoleID,
+		}
+
+		err = s.userRoleRepo.Create(userRole)
+		if err != nil {
+			// If user-role creation fails, cleanup user and tenant-user
+			s.tenantUserRepo.Delete(tenantUser.ID)
+			s.userRepo.Delete(user.ID)
+			return nil, errors.New("failed to create user-role relationship")
+		}
+	}
+
 	return user, nil
 }
 
@@ -104,21 +138,44 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 		return nil, err
 	}
 
+	// Get the user's tenant ID from TenantUsers relationship
+	var tenantID uuid.UUID
+	if len(user.TenantUsers) > 0 {
+		tenantID = user.TenantUsers[0].TenantID
+	} else {
+		return nil, errors.New("user is not associated with any tenant")
+	}
+
 	// Check if email already exists (if changed and provided)
 	if req.Email != nil && *req.Email != "" && *req.Email != user.Email {
-		existingUser, _ := s.userRepo.GetByEmailAndTenant(*req.Email, user.TenantID)
+		existingUser, _ := s.userRepo.GetByEmailAndTenant(*req.Email, tenantID)
 		if existingUser != nil && existingUser.ID != id {
 			return nil, errors.New("email already exists")
 		}
 	}
 
-	// Validate role if provided
+	// Handle role update if provided
 	if req.RoleID != nil {
 		_, err := s.roleRepo.GetByID(*req.RoleID)
 		if err != nil {
 			return nil, errors.New("invalid role ID")
 		}
-		user.RoleID = req.RoleID
+
+		// Delete existing user roles and create new one
+		err = s.userRoleRepo.DeleteAllUserRoles(user.ID)
+		if err != nil {
+			return nil, errors.New("failed to update user role")
+		}
+
+		userRole := &model.UserRole{
+			UserID: user.ID,
+			RoleID: *req.RoleID,
+		}
+
+		err = s.userRoleRepo.Create(userRole)
+		if err != nil {
+			return nil, errors.New("failed to create new user role")
+		}
 	}
 
 	// Update fields
@@ -142,6 +199,16 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 	}
 	if req.IsActive != nil {
 		user.IsActive = *req.IsActive
+
+		// Also update the tenant-user active status
+		if len(user.TenantUsers) > 0 {
+			tenantUser := &user.TenantUsers[0]
+			tenantUser.IsActive = *req.IsActive
+			err = s.tenantUserRepo.Update(tenantUser)
+			if err != nil {
+				return nil, errors.New("failed to update tenant-user status")
+			}
+		}
 	}
 
 	err = s.userRepo.Update(user)
@@ -180,7 +247,7 @@ func (s *userService) List(tenantID uuid.UUID, params dto.UserQueryParams) ([]mo
 	if params.RoleID != nil {
 		users, total, err = s.userRepo.GetByRole(tenantID, *params.RoleID, offset, params.Limit)
 	} else {
-		users, total, err = s.userRepo.List(tenantID, offset, params.Limit, params.Search)
+		users, total, err = s.userRepo.GetUsersByTenant(tenantID, offset, params.Limit, params.Search)
 	}
 
 	if err != nil {
