@@ -5,97 +5,90 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/protocyber/kelasgo-api/internal/config"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 // Logger creates a structured logging middleware
-func Logger() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			start := time.Now()
-
-			err := next(c)
-
-			req := c.Request()
-			res := c.Response()
-
-			latency := time.Since(start)
-
-			logEvent := log.Info()
-			if err != nil {
-				logEvent = log.Error().Err(err)
-			}
-
-			logEvent.
-				Str("method", req.Method).
-				Str("uri", req.RequestURI).
-				Str("remote_ip", c.RealIP()).
-				Str("user_agent", req.UserAgent()).
-				Int("status", res.Status).
-				Int64("bytes_in", req.ContentLength).
-				Int64("bytes_out", res.Size).
-				Dur("latency", latency).
-				Str("latency_human", latency.String()).
-				Msg("HTTP Request")
-
-			return err
+func Logger() gin.HandlerFunc {
+	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+		logEvent := log.Info()
+		if param.StatusCode >= 400 {
+			logEvent = log.Error()
 		}
-	}
+
+		logEvent.
+			Str("method", param.Method).
+			Str("uri", param.Path).
+			Str("remote_ip", param.ClientIP).
+			Str("user_agent", param.Request.UserAgent()).
+			Int("status", param.StatusCode).
+			Int64("bytes_in", param.Request.ContentLength).
+			Dur("latency", param.Latency).
+			Str("latency_human", param.Latency.String()).
+			Msg("HTTP Request")
+
+		return ""
+	})
 }
 
 // RequestLogger returns a customized logger middleware with enhanced request logging
-func RequestLogger(cfg *config.Config) echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			start := time.Now()
+func RequestLogger(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		raw := c.Request.URL.RawQuery
 
-			err := next(c)
+		// Process request
+		c.Next()
 
-			req := c.Request()
-			res := c.Response()
+		// Calculate latency
+		latency := time.Since(start)
 
-			latency := time.Since(start)
+		// Get status code
+		statusCode := c.Writer.Status()
 
-			logEvent := log.Info()
-			if err != nil {
-				logEvent = log.Error().Err(err)
+		logEvent := log.Info()
+		if statusCode >= 400 {
+			logEvent = log.Error()
+		}
+
+		// Enhanced logging based on environment
+		if cfg.Server.Env == "development" {
+			logEvent.
+				Str("method", c.Request.Method).
+				Str("uri", path).
+				Str("remote_ip", c.ClientIP()).
+				Str("user_agent", c.Request.UserAgent()).
+				Int("status", statusCode).
+				Int64("bytes_in", c.Request.ContentLength).
+				Int("bytes_out", c.Writer.Size()).
+				Dur("latency", latency).
+				Str("latency_human", latency.String()).
+				Msg("HTTP Request")
+		} else {
+			// More detailed logging for production
+			uri := path
+			if raw != "" {
+				uri = path + "?" + raw
 			}
 
-			// Enhanced logging based on environment
-			if cfg.Server.Env == "development" {
-				logEvent.
-					Str("method", req.Method).
-					Str("uri", req.RequestURI).
-					Str("remote_ip", c.RealIP()).
-					Str("user_agent", req.UserAgent()).
-					Int("status", res.Status).
-					Int64("bytes_in", req.ContentLength).
-					Int64("bytes_out", res.Size).
-					Dur("latency", latency).
-					Str("latency_human", latency.String()).
-					Msg("HTTP Request")
-			} else {
-				// More detailed logging for production
-				logEvent.
-					Str("method", req.Method).
-					Str("uri", req.RequestURI).
-					Str("remote_ip", c.RealIP()).
-					Str("user_agent", req.UserAgent()).
-					Str("host", req.Host).
-					Str("referer", req.Referer()).
-					Int("status", res.Status).
-					Int64("bytes_in", req.ContentLength).
-					Int64("bytes_out", res.Size).
-					Dur("latency", latency).
-					Str("latency_human", latency.String()).
-					Str("protocol", req.Proto).
-					Msg("HTTP Request")
-			}
-
-			return err
+			logEvent.
+				Str("method", c.Request.Method).
+				Str("uri", uri).
+				Str("remote_ip", c.ClientIP()).
+				Str("user_agent", c.Request.UserAgent()).
+				Str("host", c.Request.Host).
+				Str("referer", c.Request.Referer()).
+				Int("status", statusCode).
+				Int64("bytes_in", c.Request.ContentLength).
+				Int("bytes_out", c.Writer.Size()).
+				Dur("latency", latency).
+				Str("latency_human", latency.String()).
+				Str("protocol", c.Request.Proto).
+				Msg("HTTP Request")
 		}
 	}
 }

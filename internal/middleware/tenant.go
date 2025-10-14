@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
 	"github.com/protocyber/kelasgo-api/internal/database"
 )
 
@@ -16,88 +16,90 @@ const TenantIDKey TenantContextKey = "tenant_id"
 
 // TenantMiddleware extracts tenant ID from various sources and adds it to context
 // It also sets the PostgreSQL session variable for Row Level Security
-func TenantMiddleware(db *database.DatabaseConnections) echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			var tenantID uuid.UUID
-			var err error
+func TenantMiddleware(db *database.DatabaseConnections) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var tenantID uuid.UUID
+		var err error
 
-			// Try to get tenant ID from different sources in order of priority:
-			// 1. Header (X-Tenant-ID)
-			// 2. Query parameter (tenant_id)
-			// 3. Subdomain (for subdomain-based tenancy)
+		// Try to get tenant ID from different sources in order of priority:
+		// 1. Header (X-Tenant-ID)
+		// 2. Query parameter (tenant_id)
+		// 3. Subdomain (for subdomain-based tenancy)
 
-			// 1. Check header
-			tenantIDStr := c.Request().Header.Get("X-Tenant-ID")
+		// 1. Check header
+		tenantIDStr := c.GetHeader("X-Tenant-ID")
 
-			// 2. Check query parameter if header is empty
-			if tenantIDStr == "" {
-				tenantIDStr = c.QueryParam("tenant_id")
-			}
-
-			// 3. Extract from subdomain if still empty
-			if tenantIDStr == "" {
-				host := c.Request().Host
-				// Example: tenant.example.com -> tenant
-				// This is a basic implementation, adjust based on your domain structure
-				if subdomain := extractSubdomain(host); subdomain != "" && subdomain != "www" && subdomain != "api" {
-					tenantIDStr = subdomain
-				}
-			}
-
-			// Parse tenant ID if found
-			if tenantIDStr != "" {
-				tenantID, err = uuid.Parse(tenantIDStr)
-				if err != nil {
-					// If tenant ID is not a valid UUID, you might want to look it up by name/slug
-					// For now, we'll return an error
-					return c.JSON(http.StatusBadRequest, map[string]interface{}{
-						"error":   "Invalid tenant ID format",
-						"message": "Tenant ID must be a valid UUID",
-					})
-				}
-
-				// Set PostgreSQL session variable for Row Level Security
-				if err := setTenantContext(db, tenantID); err != nil {
-					return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-						"error":   "Failed to set tenant context",
-						"message": "Unable to establish tenant isolation",
-					})
-				}
-			}
-
-			// Add tenant ID to context (even if empty - some operations might not require tenant)
-			ctx := context.WithValue(c.Request().Context(), TenantIDKey, tenantID)
-			c.SetRequest(c.Request().WithContext(ctx))
-
-			// Also set in Echo context for easier access
-			c.Set(string(TenantIDKey), tenantID)
-
-			return next(c)
+		// 2. Check query parameter if header is empty
+		if tenantIDStr == "" {
+			tenantIDStr = c.Query("tenant_id")
 		}
+
+		// 3. Extract from subdomain if still empty
+		if tenantIDStr == "" {
+			host := c.Request.Host
+			// Example: tenant.example.com -> tenant
+			// This is a basic implementation, adjust based on your domain structure
+			if subdomain := extractSubdomain(host); subdomain != "" && subdomain != "www" && subdomain != "api" {
+				tenantIDStr = subdomain
+			}
+		}
+
+		// Parse tenant ID if found
+		if tenantIDStr != "" {
+			tenantID, err = uuid.Parse(tenantIDStr)
+			if err != nil {
+				// If tenant ID is not a valid UUID, you might want to look it up by name/slug
+				// For now, we'll return an error
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":   "Invalid tenant ID format",
+					"message": "Tenant ID must be a valid UUID",
+				})
+				c.Abort()
+				return
+			}
+
+			// Set PostgreSQL session variable for Row Level Security
+			if err := setTenantContext(db, tenantID); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error":   "Failed to set tenant context",
+					"message": "Unable to establish tenant isolation",
+				})
+				c.Abort()
+				return
+			}
+		}
+
+		// Add tenant ID to context (even if empty - some operations might not require tenant)
+		ctx := context.WithValue(c.Request.Context(), TenantIDKey, tenantID)
+		c.Request = c.Request.WithContext(ctx)
+
+		// Also set in Gin context for easier access
+		c.Set(string(TenantIDKey), tenantID)
+
+		c.Next()
 	}
 }
 
 // RequireTenant is a middleware that ensures a tenant ID is present
-func RequireTenant() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			tenantID := c.Get(string(TenantIDKey))
-			if tenantID == nil || tenantID == uuid.Nil {
-				return c.JSON(http.StatusBadRequest, map[string]interface{}{
-					"error":   "Tenant ID required",
-					"message": "This operation requires a valid tenant ID",
-				})
-			}
-
-			return next(c)
+func RequireTenant() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tenantID, exists := c.Get(string(TenantIDKey))
+		if !exists || tenantID == nil || tenantID == uuid.Nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Tenant ID required",
+				"message": "This operation requires a valid tenant ID",
+			})
+			c.Abort()
+			return
 		}
+
+		c.Next()
 	}
 }
 
-// GetTenantID extracts tenant ID from Echo context
-func GetTenantID(c echo.Context) uuid.UUID {
-	if tenantID := c.Get(string(TenantIDKey)); tenantID != nil {
+// GetTenantID extracts tenant ID from Gin context
+func GetTenantID(c *gin.Context) uuid.UUID {
+	if tenantID, exists := c.Get(string(TenantIDKey)); exists && tenantID != nil {
 		if tid, ok := tenantID.(uuid.UUID); ok {
 			return tid
 		}

@@ -1,44 +1,45 @@
 package middleware
 
 import (
+	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/protocyber/kelasgo-api/internal/config"
 )
 
 // CORSMiddleware creates a CORS middleware based on configuration
-func CORSMiddleware(corsConfig config.CORSConfig) echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			// Skip CORS if disabled
-			if !corsConfig.Enable {
-				return next(c)
-			}
-
-			// Set CORS headers
-			c.Response().Header().Set("Access-Control-Allow-Origin", corsConfig.AllowedOrigins)
-			c.Response().Header().Set("Access-Control-Allow-Methods", corsConfig.AllowedMethods)
-			c.Response().Header().Set("Access-Control-Allow-Headers", corsConfig.AllowedHeaders)
-			c.Response().Header().Set("Access-Control-Allow-Credentials", strconv.FormatBool(corsConfig.AllowCredentials))
-
-			if corsConfig.MaxAgeSeconds > 0 {
-				c.Response().Header().Set("Access-Control-Max-Age", strconv.Itoa(corsConfig.MaxAgeSeconds))
-			}
-
-			// Handle preflight requests
-			if c.Request().Method == "OPTIONS" {
-				return c.NoContent(204)
-			}
-
-			return next(c)
+func CORSMiddleware(corsConfig config.CORSConfig) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Skip CORS if disabled
+		if !corsConfig.Enable {
+			c.Next()
+			return
 		}
+
+		// Set CORS headers
+		c.Header("Access-Control-Allow-Origin", corsConfig.AllowedOrigins)
+		c.Header("Access-Control-Allow-Methods", corsConfig.AllowedMethods)
+		c.Header("Access-Control-Allow-Headers", corsConfig.AllowedHeaders)
+		c.Header("Access-Control-Allow-Credentials", strconv.FormatBool(corsConfig.AllowCredentials))
+
+		if corsConfig.MaxAgeSeconds > 0 {
+			c.Header("Access-Control-Max-Age", strconv.Itoa(corsConfig.MaxAgeSeconds))
+		}
+
+		// Handle preflight requests
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
+		c.Next()
 	}
 }
 
 // CORSWithDefaults creates a CORS middleware with default settings (backward compatibility)
-func CORSWithDefaults() echo.MiddlewareFunc {
+func CORSWithDefaults() gin.HandlerFunc {
 	defaultConfig := config.CORSConfig{
 		Enable:           true,
 		AllowCredentials: true,

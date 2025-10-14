@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/protocyber/kelasgo-api/internal/middleware"
 	"github.com/rs/zerolog/log"
 )
@@ -29,19 +29,32 @@ func main() {
 	}
 	log.Info().Msg("Database connections healthy")
 
-	// Create Echo instance
-	e := echo.New()
+	// Set Gin mode based on environment
+	if app.Config.Server.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	} else {
+		gin.SetMode(gin.DebugMode)
+	}
+
+	// Create Gin router
+	r := gin.New()
 
 	// Setup routes
-	SetupRoutes(e, app.Config, app.AuthHandler, app.UserHandler, app.JWTService, app.DBConns)
+	SetupRoutes(r, app.Config, app.AuthHandler, app.UserHandler, app.JWTService, app.DBConns)
 
 	// Get server address
 	serverAddr := app.Config.GetServerAddress()
 
+	// Create HTTP server
+	srv := &http.Server{
+		Addr:    serverAddr,
+		Handler: r,
+	}
+
 	// Start server in a goroutine
 	go func() {
 		log.Info().Msgf("Starting server on %s", serverAddr)
-		if err := e.Start(serverAddr); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal().Err(err).Msg("Failed to start server")
 		}
 	}()
@@ -58,7 +71,7 @@ func main() {
 	defer cancel()
 
 	// Gracefully shutdown the server
-	if err := e.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal().Err(err).Msg("Failed to gracefully shutdown server")
 	}
 
