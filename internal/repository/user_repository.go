@@ -16,8 +16,10 @@ type UserRepository interface {
 	GetByID(id uuid.UUID) (*model.User, error)
 	GetByUsername(username string) (*model.User, error)
 	GetByEmail(email string) (*model.User, error)
+	GetByEmailGlobal(email string) (*model.User, error) // Global email lookup without tenant context
 	GetByUsernameAndTenant(username string, tenantID uuid.UUID) (*model.User, error)
 	GetByEmailAndTenant(email string, tenantID uuid.UUID) (*model.User, error)
+	GetUserTenants(userID uuid.UUID) ([]model.TenantUser, error) // Get all tenants for a user
 	Update(user *model.User) error
 	Delete(id uuid.UUID) error
 	List(offset, limit int, search string) ([]model.User, int64, error)
@@ -91,6 +93,38 @@ func (r *userRepository) GetByEmail(email string) (*model.User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *userRepository) GetByEmailGlobal(email string) (*model.User, error) {
+	var user model.User
+	err := r.db.Read.Where("email = ?", email).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Debug().
+				Str("email", email).
+				Msg("User not found by email globally")
+			return nil, errors.New("user not found")
+		}
+		log.Error().
+			Err(err).
+			Str("email", email).
+			Msg("Database error while getting user by email globally")
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *userRepository) GetUserTenants(userID uuid.UUID) ([]model.TenantUser, error) {
+	var tenantUsers []model.TenantUser
+	err := r.db.Read.Preload("Tenant").Where("user_id = ? AND is_active = true", userID).Find(&tenantUsers).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", userID.String()).
+			Msg("Failed to get user tenants from database")
+		return nil, err
+	}
+	return tenantUsers, nil
 }
 
 func (r *userRepository) Update(user *model.User) error {

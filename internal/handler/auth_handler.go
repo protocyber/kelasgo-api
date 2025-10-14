@@ -7,7 +7,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/dto"
-	"github.com/protocyber/kelasgo-api/internal/middleware"
 	"github.com/protocyber/kelasgo-api/internal/service"
 	"github.com/rs/zerolog/log"
 )
@@ -46,7 +45,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if err := h.validator.Struct(req); err != nil {
 		log.Warn().
 			Err(err).
-			Str("username", req.Username).
+			Str("email", req.Email).
 			Str("remote_ip", c.ClientIP()).
 			Msg("Login request validation failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -61,8 +60,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if err != nil {
 		log.Warn().
 			Err(err).
-			Str("username", req.Username).
-			Str("tenant_id", req.TenantID).
+			Str("email", req.Email).
 			Str("remote_ip", c.ClientIP()).
 			Msg("Login attempt failed")
 		c.JSON(http.StatusUnauthorized, dto.Response{
@@ -73,10 +71,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	tenantIDStr := "none"
+	if response.User.TenantID != nil {
+		tenantIDStr = response.User.TenantID.String()
+	}
+
 	log.Info().
 		Str("user_id", response.User.ID.String()).
-		Str("username", response.User.Username).
-		Str("tenant_id", response.User.TenantID.String()).
+		Str("email", response.User.Email).
+		Str("tenant_id", tenantIDStr).
 		Str("remote_ip", c.ClientIP()).
 		Msg("User logged in successfully")
 
@@ -89,26 +92,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 // Register handles user registration
 func (h *AuthHandler) Register(c *gin.Context) {
-	// Get tenant ID from middleware context
-	tenantID := middleware.GetTenantID(c)
-	if tenantID == uuid.Nil {
-		log.Error().
-			Str("remote_ip", c.ClientIP()).
-			Str("user_agent", c.Request.UserAgent()).
-			Msg("Registration attempt without valid tenant ID")
-		c.JSON(http.StatusBadRequest, dto.Response{
-			Success: false,
-			Message: "Tenant ID required",
-			Error:   "Registration requires a valid tenant context",
-		})
-		return
-	}
-
-	var req dto.CreateUserRequest
+	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_id", tenantID.String()).
 			Str("remote_ip", c.ClientIP()).
 			Msg("Failed to bind registration request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -124,7 +111,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			Err(err).
 			Str("username", req.Username).
 			Str("email", req.Email).
-			Str("tenant_id", tenantID.String()).
 			Str("remote_ip", c.ClientIP()).
 			Msg("Registration request validation failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -135,13 +121,12 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.Register(tenantID, req)
+	user, err := h.authService.Register(req)
 	if err != nil {
 		log.Error().
 			Err(err).
 			Str("username", req.Username).
 			Str("email", req.Email).
-			Str("tenant_id", tenantID.String()).
 			Str("remote_ip", c.ClientIP()).
 			Msg("User registration failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -155,7 +140,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	log.Info().
 		Str("user_id", user.ID.String()).
 		Str("username", user.Username).
-		Str("tenant_id", tenantID.String()).
+		Str("email", req.Email).
 		Str("remote_ip", c.ClientIP()).
 		Msg("User registered successfully")
 
@@ -249,5 +234,154 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.Response{
 		Success: true,
 		Message: "Password changed successfully",
+	})
+}
+
+// SelectTenant handles tenant selection after authentication
+func (h *AuthHandler) SelectTenant(c *gin.Context) {
+	userIDInterface, exists := c.Get("user_id")
+	if !exists || userIDInterface == nil {
+		log.Error().
+			Str("remote_ip", c.ClientIP()).
+			Bool("exists", exists).
+			Interface("user_id", userIDInterface).
+			Msg("User ID not found in context during tenant selection")
+		c.JSON(http.StatusUnauthorized, dto.Response{
+			Success: false,
+			Message: "Unauthorized",
+			Error:   "User ID not found in context",
+		})
+		return
+	}
+
+	userID, ok := userIDInterface.(uuid.UUID)
+	if !ok {
+		log.Error().
+			Str("remote_ip", c.ClientIP()).
+			Interface("user_id", userIDInterface).
+			Msg("Invalid user ID format in context during tenant selection")
+		c.JSON(http.StatusUnauthorized, dto.Response{
+			Success: false,
+			Message: "Unauthorized",
+			Error:   "Invalid user ID format in context",
+		})
+		return
+	}
+
+	var req dto.TenantSelectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", userID.String()).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Failed to bind tenant selection request JSON")
+		c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Invalid request body",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if err := h.validator.Struct(req); err != nil {
+		log.Warn().
+			Err(err).
+			Str("user_id", userID.String()).
+			Str("tenant_id", req.TenantID).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Tenant selection request validation failed")
+		c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Validation failed",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	response, err := h.authService.SelectTenant(userID, req)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", userID.String()).
+			Str("tenant_id", req.TenantID).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Tenant selection failed")
+		c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Tenant selection failed",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	log.Info().
+		Str("user_id", userID.String()).
+		Str("tenant_id", req.TenantID).
+		Str("remote_ip", c.ClientIP()).
+		Msg("Tenant selected successfully")
+
+	c.JSON(http.StatusOK, dto.Response{
+		Success: true,
+		Message: "Tenant selected successfully",
+		Data:    response,
+	})
+}
+
+// GetUserTenants handles getting all tenants for the authenticated user
+func (h *AuthHandler) GetUserTenants(c *gin.Context) {
+	userIDInterface, exists := c.Get("user_id")
+	if !exists || userIDInterface == nil {
+		log.Error().
+			Str("remote_ip", c.ClientIP()).
+			Bool("exists", exists).
+			Interface("user_id", userIDInterface).
+			Msg("User ID not found in context during get user tenants")
+		c.JSON(http.StatusUnauthorized, dto.Response{
+			Success: false,
+			Message: "Unauthorized",
+			Error:   "User ID not found in context",
+		})
+		return
+	}
+
+	userID, ok := userIDInterface.(uuid.UUID)
+	if !ok {
+		log.Error().
+			Str("remote_ip", c.ClientIP()).
+			Interface("user_id", userIDInterface).
+			Msg("Invalid user ID format in context during get user tenants")
+		c.JSON(http.StatusUnauthorized, dto.Response{
+			Success: false,
+			Message: "Unauthorized",
+			Error:   "Invalid user ID format in context",
+		})
+		return
+	}
+
+	tenants, err := h.authService.GetUserTenants(userID)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", userID.String()).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Failed to get user tenants")
+		c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Failed to get user tenants",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	log.Info().
+		Str("user_id", userID.String()).
+		Int("tenant_count", len(tenants)).
+		Str("remote_ip", c.ClientIP()).
+		Msg("User tenants retrieved successfully")
+
+	c.JSON(http.StatusOK, dto.Response{
+		Success: true,
+		Message: "User tenants retrieved successfully",
+		Data:    tenants,
 	})
 }
