@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 
+	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/database"
 	"github.com/protocyber/kelasgo-api/internal/model"
 	"gorm.io/gorm"
@@ -11,28 +12,33 @@ import (
 // RoleRepository interface defines role repository methods
 type RoleRepository interface {
 	Create(role *model.Role) error
-	GetByID(id uint) (*model.Role, error)
-	GetByName(name string) (*model.Role, error)
+	GetByID(id uuid.UUID) (*model.Role, error)
+	GetByName(name string, tenantID uuid.UUID) (*model.Role, error)
 	Update(role *model.Role) error
-	Delete(id uint) error
-	List(offset, limit int, search string) ([]model.Role, int64, error)
+	Delete(id uuid.UUID) error
+	List(tenantID uuid.UUID, offset, limit int, search string) ([]model.Role, int64, error)
 }
 
 // roleRepository implements RoleRepository
 type roleRepository struct {
-	db *database.DatabaseConnections
+	*BaseRepository
 }
 
 // NewRoleRepository creates a new role repository
 func NewRoleRepository(db *database.DatabaseConnections) RoleRepository {
-	return &roleRepository{db: db}
+	return &roleRepository{
+		BaseRepository: NewBaseRepository(db),
+	}
 }
 
 func (r *roleRepository) Create(role *model.Role) error {
+	if err := r.SetTenantContext(role.TenantID); err != nil {
+		return err
+	}
 	return r.db.Write.Create(role).Error
 }
 
-func (r *roleRepository) GetByID(id uint) (*model.Role, error) {
+func (r *roleRepository) GetByID(id uuid.UUID) (*model.Role, error) {
 	var role model.Role
 	err := r.db.Read.First(&role, id).Error
 	if err != nil {
@@ -44,9 +50,13 @@ func (r *roleRepository) GetByID(id uint) (*model.Role, error) {
 	return &role, nil
 }
 
-func (r *roleRepository) GetByName(name string) (*model.Role, error) {
+func (r *roleRepository) GetByName(name string, tenantID uuid.UUID) (*model.Role, error) {
+	if err := r.SetTenantContext(tenantID); err != nil {
+		return nil, err
+	}
+
 	var role model.Role
-	err := r.db.Read.Where("name = ?", name).First(&role).Error
+	err := r.db.Read.Where("name = ? AND tenant_id = ?", name, tenantID).First(&role).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("role not found")
@@ -57,18 +67,25 @@ func (r *roleRepository) GetByName(name string) (*model.Role, error) {
 }
 
 func (r *roleRepository) Update(role *model.Role) error {
+	if err := r.SetTenantContext(role.TenantID); err != nil {
+		return err
+	}
 	return r.db.Write.Save(role).Error
 }
 
-func (r *roleRepository) Delete(id uint) error {
+func (r *roleRepository) Delete(id uuid.UUID) error {
 	return r.db.Write.Delete(&model.Role{}, id).Error
 }
 
-func (r *roleRepository) List(offset, limit int, search string) ([]model.Role, int64, error) {
+func (r *roleRepository) List(tenantID uuid.UUID, offset, limit int, search string) ([]model.Role, int64, error) {
+	if err := r.SetTenantContext(tenantID); err != nil {
+		return nil, 0, err
+	}
+
 	var roles []model.Role
 	var total int64
 
-	query := r.db.Read.Model(&model.Role{})
+	query := r.db.Read.Model(&model.Role{}).Where("tenant_id = ?", tenantID)
 
 	if search != "" {
 		query = query.Where("name ILIKE ? OR description ILIKE ?",

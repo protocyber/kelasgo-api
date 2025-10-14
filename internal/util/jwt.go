@@ -6,15 +6,17 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/config"
 )
 
 // JWTClaims represents the JWT claims
 type JWTClaims struct {
-	UserID   uint   `json:"user_id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
+	UserID   uuid.UUID `json:"user_id"`
+	TenantID uuid.UUID `json:"tenant_id"`
+	Username string    `json:"username"`
+	Email    string    `json:"email"`
+	Role     string    `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -33,11 +35,12 @@ func NewJWTService(cfg *config.JWTConfig) *JWTService {
 }
 
 // GenerateToken generates a JWT token for the given user
-func (j *JWTService) GenerateToken(userID uint, username, email, role string) (string, time.Time, error) {
+func (j *JWTService) GenerateToken(userID, tenantID uuid.UUID, username, email, role string) (string, time.Time, error) {
 	expirationTime := time.Now().Add(time.Duration(j.expireTime) * time.Hour)
 
 	claims := &JWTClaims{
 		UserID:   userID,
+		TenantID: tenantID,
 		Username: username,
 		Email:    email,
 		Role:     role,
@@ -46,7 +49,7 @@ func (j *JWTService) GenerateToken(userID uint, username, email, role string) (s
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
 			Issuer:    "kelasgo-api",
-			Subject:   fmt.Sprintf("%d", userID),
+			Subject:   userID.String(),
 		},
 	}
 

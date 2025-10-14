@@ -2,11 +2,12 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/protocyber/kelasgo-api/internal/dto"
+	"github.com/protocyber/kelasgo-api/internal/middleware"
 	"github.com/protocyber/kelasgo-api/internal/service"
 )
 
@@ -61,6 +62,16 @@ func (h *AuthHandler) Login(c echo.Context) error {
 
 // Register handles user registration
 func (h *AuthHandler) Register(c echo.Context) error {
+	// Get tenant ID from middleware context
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == uuid.Nil {
+		return c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Tenant ID required",
+			Error:   "Registration requires a valid tenant context",
+		})
+	}
+
 	var req dto.CreateUserRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, dto.Response{
@@ -78,7 +89,7 @@ func (h *AuthHandler) Register(c echo.Context) error {
 		})
 	}
 
-	user, err := h.authService.Register(req)
+	user, err := h.authService.Register(tenantID, req)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -96,12 +107,21 @@ func (h *AuthHandler) Register(c echo.Context) error {
 
 // ChangePassword handles password change
 func (h *AuthHandler) ChangePassword(c echo.Context) error {
-	userID, ok := c.Get("user_id").(uint)
-	if !ok {
+	userIDInterface := c.Get("user_id")
+	if userIDInterface == nil {
 		return c.JSON(http.StatusUnauthorized, dto.Response{
 			Success: false,
 			Message: "Unauthorized",
 			Error:   "User ID not found in context",
+		})
+	}
+
+	userID, ok := userIDInterface.(uuid.UUID)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, dto.Response{
+			Success: false,
+			Message: "Unauthorized",
+			Error:   "Invalid user ID format in context",
 		})
 	}
 
@@ -170,7 +190,17 @@ func (h *UserHandler) Create(c echo.Context) error {
 		})
 	}
 
-	user, err := h.userService.Create(req)
+	// Get tenant ID from middleware context
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == uuid.Nil {
+		return c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Tenant ID required",
+			Error:   "User creation requires a valid tenant context",
+		})
+	}
+
+	user, err := h.userService.Create(tenantID, req)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -189,16 +219,16 @@ func (h *UserHandler) Create(c echo.Context) error {
 // GetByID handles getting user by ID
 func (h *UserHandler) GetByID(c echo.Context) error {
 	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
-			Message: "Invalid user ID",
+			Message: "Invalid user ID format",
 			Error:   err.Error(),
 		})
 	}
 
-	user, err := h.userService.GetByID(uint(id))
+	user, err := h.userService.GetByID(id)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, dto.Response{
 			Success: false,
@@ -217,11 +247,11 @@ func (h *UserHandler) GetByID(c echo.Context) error {
 // Update handles user update
 func (h *UserHandler) Update(c echo.Context) error {
 	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
-			Message: "Invalid user ID",
+			Message: "Invalid user ID format",
 			Error:   err.Error(),
 		})
 	}
@@ -243,7 +273,7 @@ func (h *UserHandler) Update(c echo.Context) error {
 		})
 	}
 
-	user, err := h.userService.Update(uint(id), req)
+	user, err := h.userService.Update(id, req)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -262,16 +292,16 @@ func (h *UserHandler) Update(c echo.Context) error {
 // Delete handles user deletion
 func (h *UserHandler) Delete(c echo.Context) error {
 	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
-			Message: "Invalid user ID",
+			Message: "Invalid user ID format",
 			Error:   err.Error(),
 		})
 	}
 
-	err = h.userService.Delete(uint(id))
+	err = h.userService.Delete(id)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -305,7 +335,17 @@ func (h *UserHandler) List(c echo.Context) error {
 		})
 	}
 
-	users, meta, err := h.userService.List(params)
+	// Get tenant ID from middleware context
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == uuid.Nil {
+		return c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Tenant ID required",
+			Error:   "User listing requires a valid tenant context",
+		})
+	}
+
+	users, meta, err := h.userService.List(tenantID, params)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, dto.Response{
 			Success: false,

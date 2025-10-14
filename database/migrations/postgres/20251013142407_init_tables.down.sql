@@ -15,7 +15,7 @@ BEGIN
     FOR tbl IN
         SELECT tablename FROM pg_tables
         WHERE schemaname = 'public'
-        AND tablename IN ('users','teachers','students','subjects','classes','class_subjects','academic_years','attendance', 'grades','enrollments','schedules','departments','parents','notifications','student_fees','fee_types','tenant_features')
+        AND tablename IN ('tenant_users','teachers','students','subjects','classes','class_subjects','academic_years','attendance', 'grades','enrollments','schedules','departments','parents','notifications','student_fees','fee_types','tenant_features')
     LOOP
         EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', tbl);
     END LOOP;
@@ -44,7 +44,7 @@ ALTER TABLE IF EXISTS classes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS subjects DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS students DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS teachers DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS tenant_users DISABLE ROW LEVEL SECURITY;
 
 -- ======================================================
 -- DROP INDEXES
@@ -96,11 +96,10 @@ DROP INDEX IF EXISTS idx_class_subjects_class_teacher;
 DROP INDEX IF EXISTS idx_classes_tenant_year;
 
 -- Drop user management and authentication indexes
-DROP INDEX IF EXISTS idx_students_tenant_active;
-DROP INDEX IF EXISTS idx_teachers_tenant_active;
+DROP INDEX IF EXISTS idx_students_tenant_user_active;
+DROP INDEX IF EXISTS idx_teachers_tenant_user_active;
 DROP INDEX IF EXISTS idx_user_roles_role_id;
-DROP INDEX IF EXISTS idx_users_tenant_username;
-DROP INDEX IF EXISTS idx_users_tenant_email;
+DROP INDEX IF EXISTS idx_users_email_username;
 
 -- Drop subscription and billing performance indexes
 DROP INDEX IF EXISTS idx_invoices_tenant_unpaid;
@@ -116,7 +115,7 @@ DROP INDEX IF EXISTS idx_schedules_day_time_room;
 DROP INDEX IF EXISTS idx_grades_enrollment_type;
 DROP INDEX IF EXISTS idx_attendance_student_date_status;
 DROP INDEX IF EXISTS idx_students_class_enrollment;
-DROP INDEX IF EXISTS idx_users_role_active;
+
 
 -- Drop partial indexes
 DROP INDEX IF EXISTS idx_student_fees_unpaid_overdue;
@@ -138,7 +137,12 @@ DROP INDEX IF EXISTS idx_academic_years_tenant_id;
 DROP INDEX IF EXISTS idx_parents_tenant_id;
 DROP INDEX IF EXISTS idx_teachers_tenant_id;
 DROP INDEX IF EXISTS idx_departments_tenant_id;
-DROP INDEX IF EXISTS idx_users_tenant_id;
+-- Drop tenant_users indexes
+DROP INDEX IF EXISTS idx_tenant_users_user_active;
+DROP INDEX IF EXISTS idx_tenant_users_tenant_user;
+DROP INDEX IF EXISTS idx_tenant_users_is_active;
+DROP INDEX IF EXISTS idx_tenant_users_user_id;
+DROP INDEX IF EXISTS idx_tenant_users_tenant_id;
 
 -- Drop business logic indexes
 DROP INDEX IF EXISTS idx_student_fees_student_status;
@@ -176,7 +180,7 @@ DROP INDEX IF EXISTS idx_students_admission_date;
 DROP INDEX IF EXISTS idx_students_parent_id;
 DROP INDEX IF EXISTS idx_students_class_id;
 DROP INDEX IF EXISTS idx_students_student_number;
-DROP INDEX IF EXISTS idx_students_user_id;
+DROP INDEX IF EXISTS idx_students_tenant_user_id;
 DROP INDEX IF EXISTS idx_classes_grade_level;
 DROP INDEX IF EXISTS idx_classes_academic_year_id;
 DROP INDEX IF EXISTS idx_classes_homeroom_teacher_id;
@@ -186,13 +190,12 @@ DROP INDEX IF EXISTS idx_parents_email;
 DROP INDEX IF EXISTS idx_parents_phone;
 DROP INDEX IF EXISTS idx_teachers_employee_number;
 DROP INDEX IF EXISTS idx_teachers_department_id;
-DROP INDEX IF EXISTS idx_teachers_user_id;
+DROP INDEX IF EXISTS idx_teachers_tenant_user_id;
 DROP INDEX IF EXISTS idx_departments_head_teacher_id;
 DROP INDEX IF EXISTS idx_users_full_name;
 DROP INDEX IF EXISTS idx_users_is_active;
 DROP INDEX IF EXISTS idx_users_username;
 DROP INDEX IF EXISTS idx_users_email;
-DROP INDEX IF EXISTS idx_users_role_id;
 
 DROP INDEX IF EXISTS idx_fee_types_updated_at;
 
@@ -284,8 +287,6 @@ DROP INDEX IF EXISTS idx_students_class_id;
 
 DROP INDEX IF EXISTS idx_students_student_number;
 
-DROP INDEX IF EXISTS idx_students_user_id;
-
 DROP INDEX IF EXISTS idx_students_updated_at;
 
 DROP INDEX IF EXISTS idx_students_created_at;
@@ -323,8 +324,6 @@ DROP INDEX IF EXISTS idx_parents_created_at;
 DROP INDEX IF EXISTS idx_teachers_employee_number;
 
 DROP INDEX IF EXISTS idx_teachers_department_id;
-
-DROP INDEX IF EXISTS idx_teachers_user_id;
 
 DROP INDEX IF EXISTS idx_teachers_updated_at;
 
@@ -413,7 +412,7 @@ ALTER TABLE students
 DROP CONSTRAINT IF EXISTS fk_students_class_id;
 
 ALTER TABLE students
-DROP CONSTRAINT IF EXISTS fk_students_user_id;
+DROP CONSTRAINT IF EXISTS fk_students_tenant_user_id;
 
 ALTER TABLE classes
 DROP CONSTRAINT IF EXISTS fk_classes_academic_year_id;
@@ -428,10 +427,7 @@ ALTER TABLE teachers
 DROP CONSTRAINT IF EXISTS fk_teachers_department_id;
 
 ALTER TABLE teachers
-DROP CONSTRAINT IF EXISTS fk_teachers_user_id;
-
-ALTER TABLE users
-DROP CONSTRAINT IF EXISTS fk_users_role_id;
+DROP CONSTRAINT IF EXISTS fk_teachers_tenant_user_id;
 
 -- Drop all tenant-related foreign key constraints
 ALTER TABLE student_fees
@@ -479,8 +475,11 @@ DROP CONSTRAINT IF EXISTS fk_teachers_tenant_id;
 ALTER TABLE departments
 DROP CONSTRAINT IF EXISTS fk_departments_tenant_id;
 
-ALTER TABLE users
-DROP CONSTRAINT IF EXISTS fk_users_tenant_id;
+ALTER TABLE tenant_users
+DROP CONSTRAINT IF EXISTS fk_tenant_users_tenant_id;
+
+ALTER TABLE tenant_users
+DROP CONSTRAINT IF EXISTS fk_tenant_users_user_id;
 
 ALTER TABLE tenant_features
 DROP CONSTRAINT IF EXISTS fk_tenant_features_tenant_id;
@@ -645,6 +644,7 @@ DROP TABLE IF EXISTS parents;
 DROP TABLE IF EXISTS teachers;
 DROP TABLE IF EXISTS departments;
 DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS tenant_users;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS roles;
 

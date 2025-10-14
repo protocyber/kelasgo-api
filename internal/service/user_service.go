@@ -4,18 +4,20 @@ import (
 	"errors"
 	"math"
 
+	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/dto"
 	"github.com/protocyber/kelasgo-api/internal/model"
 	"github.com/protocyber/kelasgo-api/internal/repository"
+	"github.com/protocyber/kelasgo-api/internal/util"
 )
 
 // UserService interface defines user service methods
 type UserService interface {
-	Create(req dto.CreateUserRequest) (*model.User, error)
-	GetByID(id uint) (*model.User, error)
-	Update(id uint, req dto.UpdateUserRequest) (*model.User, error)
-	Delete(id uint) error
-	List(params dto.UserQueryParams) ([]model.User, *dto.PaginationMeta, error)
+	Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*model.User, error)
+	GetByID(id uuid.UUID) (*model.User, error)
+	Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.User, error)
+	Delete(id uuid.UUID) error
+	List(tenantID uuid.UUID, params dto.UserQueryParams) ([]model.User, *dto.PaginationMeta, error)
 }
 
 // userService implements UserService
@@ -35,37 +37,38 @@ func NewUserService(
 	}
 }
 
-func (s *userService) Create(req dto.CreateUserRequest) (*model.User, error) {
-	// Check if username already exists
-	existingUser, _ := s.userRepo.GetByUsername(req.Username)
+func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*model.User, error) {
+	// Check if username already exists within tenant
+	existingUser, _ := s.userRepo.GetByUsernameAndTenant(req.Username, tenantID)
 	if existingUser != nil {
 		return nil, errors.New("username already exists")
 	}
 
-	// Check if email already exists (if provided)
+	// Check if email already exists within tenant (if provided)
 	if req.Email != "" {
-		existingUser, _ = s.userRepo.GetByEmail(req.Email)
+		existingUser, _ = s.userRepo.GetByEmailAndTenant(req.Email, tenantID)
 		if existingUser != nil {
 			return nil, errors.New("email already exists")
 		}
 	}
 
 	// Validate role if provided
-	if req.RoleID.Valid {
-		_, err := s.roleRepo.GetByID(uint(req.RoleID.Int64))
+	if req.RoleID != nil {
+		_, err := s.roleRepo.GetByID(*req.RoleID)
 		if err != nil {
 			return nil, errors.New("invalid role ID")
 		}
 	}
 
 	// Hash password
-	hashedPassword, err := hashPassword(req.Password)
+	hashedPassword, err := util.HashPassword(req.Password)
 	if err != nil {
 		return nil, errors.New("failed to hash password")
 	}
 
 	// Create user
 	user := &model.User{
+		TenantID:     tenantID,
 		RoleID:       req.RoleID,
 		Username:     req.Username,
 		PasswordHash: hashedPassword,
@@ -90,11 +93,11 @@ func (s *userService) Create(req dto.CreateUserRequest) (*model.User, error) {
 	return user, nil
 }
 
-func (s *userService) GetByID(id uint) (*model.User, error) {
+func (s *userService) GetByID(id uuid.UUID) (*model.User, error) {
 	return s.userRepo.GetByID(id)
 }
 
-func (s *userService) Update(id uint, req dto.UpdateUserRequest) (*model.User, error) {
+func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.User, error) {
 	// Get existing user
 	user, err := s.userRepo.GetByID(id)
 	if err != nil {
@@ -102,16 +105,16 @@ func (s *userService) Update(id uint, req dto.UpdateUserRequest) (*model.User, e
 	}
 
 	// Check if email already exists (if changed and provided)
-	if req.Email != "" && req.Email != user.Email {
-		existingUser, _ := s.userRepo.GetByEmail(req.Email)
+	if req.Email != nil && *req.Email != "" && *req.Email != user.Email {
+		existingUser, _ := s.userRepo.GetByEmailAndTenant(*req.Email, user.TenantID)
 		if existingUser != nil && existingUser.ID != id {
 			return nil, errors.New("email already exists")
 		}
 	}
 
 	// Validate role if provided
-	if req.RoleID.Valid {
-		_, err := s.roleRepo.GetByID(uint(req.RoleID.Int64))
+	if req.RoleID != nil {
+		_, err := s.roleRepo.GetByID(*req.RoleID)
 		if err != nil {
 			return nil, errors.New("invalid role ID")
 		}
@@ -119,22 +122,22 @@ func (s *userService) Update(id uint, req dto.UpdateUserRequest) (*model.User, e
 	}
 
 	// Update fields
-	if req.Email != "" {
-		user.Email = req.Email
+	if req.Email != nil && *req.Email != "" {
+		user.Email = *req.Email
 	}
-	if req.FullName != "" {
-		user.FullName = req.FullName
+	if req.FullName != nil && *req.FullName != "" {
+		user.FullName = *req.FullName
 	}
-	if req.Gender != "" {
+	if req.Gender != nil {
 		user.Gender = req.Gender
 	}
-	if req.DateOfBirth.Valid {
+	if req.DateOfBirth != nil {
 		user.DateOfBirth = req.DateOfBirth
 	}
-	if req.Phone != "" {
+	if req.Phone != nil {
 		user.Phone = req.Phone
 	}
-	if req.Address != "" {
+	if req.Address != nil {
 		user.Address = req.Address
 	}
 	if req.IsActive != nil {
@@ -149,7 +152,7 @@ func (s *userService) Update(id uint, req dto.UpdateUserRequest) (*model.User, e
 	return user, nil
 }
 
-func (s *userService) Delete(id uint) error {
+func (s *userService) Delete(id uuid.UUID) error {
 	// Check if user exists
 	_, err := s.userRepo.GetByID(id)
 	if err != nil {
@@ -159,7 +162,7 @@ func (s *userService) Delete(id uint) error {
 	return s.userRepo.Delete(id)
 }
 
-func (s *userService) List(params dto.UserQueryParams) ([]model.User, *dto.PaginationMeta, error) {
+func (s *userService) List(tenantID uuid.UUID, params dto.UserQueryParams) ([]model.User, *dto.PaginationMeta, error) {
 	// Set defaults
 	if params.Page < 1 {
 		params.Page = 1
@@ -174,10 +177,10 @@ func (s *userService) List(params dto.UserQueryParams) ([]model.User, *dto.Pagin
 	var total int64
 	var err error
 
-	if params.RoleID > 0 {
-		users, total, err = s.userRepo.GetByRole(uint(params.RoleID), offset, params.Limit)
+	if params.RoleID != nil {
+		users, total, err = s.userRepo.GetByRole(tenantID, *params.RoleID, offset, params.Limit)
 	} else {
-		users, total, err = s.userRepo.List(offset, params.Limit, params.Search)
+		users, total, err = s.userRepo.List(tenantID, offset, params.Limit, params.Search)
 	}
 
 	if err != nil {
@@ -194,11 +197,4 @@ func (s *userService) List(params dto.UserQueryParams) ([]model.User, *dto.Pagin
 	}
 
 	return users, meta, nil
-}
-
-// Helper function to hash password (placeholder implementation)
-func hashPassword(password string) (string, error) {
-	// This should use util.HashPassword but to avoid circular import
-	// we'll implement it here or refactor later
-	return password + "_hashed", nil // Placeholder
 }

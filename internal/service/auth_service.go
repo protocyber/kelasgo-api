@@ -2,8 +2,8 @@ package service
 
 import (
 	"errors"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/dto"
 	"github.com/protocyber/kelasgo-api/internal/model"
 	"github.com/protocyber/kelasgo-api/internal/repository"
@@ -13,8 +13,9 @@ import (
 // AuthService interface defines authentication service methods
 type AuthService interface {
 	Login(req dto.LoginRequest) (*dto.LoginResponse, error)
-	Register(req dto.CreateUserRequest) (*model.User, error)
-	ChangePassword(userID uint, req dto.ChangePasswordRequest) error
+	Register(tenantID uuid.UUID, req dto.CreateUserRequest) (*model.User, error)
+	ChangePassword(userID uuid.UUID, req dto.ChangePasswordRequest) error
+	ValidateToken(token string) (*dto.TokenClaims, error)
 }
 
 // authService implements AuthService
@@ -38,8 +39,18 @@ func NewAuthService(
 }
 
 func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
-	// Get user by username
-	user, err := s.userRepo.GetByUsername(req.Username)
+	// Parse tenant ID if provided
+	var tenantID uuid.UUID
+	var err error
+	if req.TenantID != "" {
+		tenantID, err = uuid.Parse(req.TenantID)
+		if err != nil {
+			return nil, errors.New("invalid tenant ID format")
+		}
+	}
+
+	// Get user by username and tenant
+	user, err := s.userRepo.GetByUsernameAndTenant(req.Username, tenantID)
 	if err != nil {
 		return nil, errors.New("invalid username or password")
 	}
@@ -63,6 +74,7 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 	// Generate JWT token
 	token, expiresAt, err := s.jwtService.GenerateToken(
 		user.ID,
+		user.TenantID,
 		user.Username,
 		user.Email,
 		roleName,
@@ -80,6 +92,7 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 		ExpiresAt:    expiresAt,
 		User: dto.UserInfo{
 			ID:       user.ID,
+			TenantID: user.TenantID,
 			Username: user.Username,
 			Email:    user.Email,
 			FullName: user.FullName,
@@ -88,16 +101,16 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 	}, nil
 }
 
-func (s *authService) Register(req dto.CreateUserRequest) (*model.User, error) {
-	// Check if username already exists
-	existingUser, _ := s.userRepo.GetByUsername(req.Username)
+func (s *authService) Register(tenantID uuid.UUID, req dto.CreateUserRequest) (*model.User, error) {
+	// Check if username already exists in this tenant
+	existingUser, _ := s.userRepo.GetByUsernameAndTenant(req.Username, tenantID)
 	if existingUser != nil {
 		return nil, errors.New("username already exists")
 	}
 
-	// Check if email already exists (if provided)
+	// Check if email already exists in this tenant (if provided)
 	if req.Email != "" {
-		existingUser, _ = s.userRepo.GetByEmail(req.Email)
+		existingUser, _ = s.userRepo.GetByEmailAndTenant(req.Email, tenantID)
 		if existingUser != nil {
 			return nil, errors.New("email already exists")
 		}
@@ -111,6 +124,7 @@ func (s *authService) Register(req dto.CreateUserRequest) (*model.User, error) {
 
 	// Create user
 	user := &model.User{
+		TenantID:     tenantID,
 		RoleID:       req.RoleID,
 		Username:     req.Username,
 		PasswordHash: hashedPassword,
@@ -135,7 +149,7 @@ func (s *authService) Register(req dto.CreateUserRequest) (*model.User, error) {
 	return user, nil
 }
 
-func (s *authService) ChangePassword(userID uint, req dto.ChangePasswordRequest) error {
+func (s *authService) ChangePassword(userID uuid.UUID, req dto.ChangePasswordRequest) error {
 	// Get user
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
@@ -155,7 +169,6 @@ func (s *authService) ChangePassword(userID uint, req dto.ChangePasswordRequest)
 
 	// Update password
 	user.PasswordHash = hashedPassword
-	user.UpdatedAt = time.Now()
 
 	err = s.userRepo.Update(user)
 	if err != nil {
@@ -163,4 +176,23 @@ func (s *authService) ChangePassword(userID uint, req dto.ChangePasswordRequest)
 	}
 
 	return nil
+}
+
+func (s *authService) ValidateToken(token string) (*dto.TokenClaims, error) {
+	// Validate JWT token using JWT service
+	claims, err := s.jwtService.ValidateToken(token)
+	if err != nil {
+		return nil, errors.New("invalid token")
+	}
+
+	// Convert JWT claims to DTO claims
+	tokenClaims := &dto.TokenClaims{
+		UserID:   claims.UserID,
+		TenantID: claims.TenantID,
+		Username: claims.Username,
+		Email:    claims.Email,
+		Role:     claims.Role,
+	}
+
+	return tokenClaims, nil
 }

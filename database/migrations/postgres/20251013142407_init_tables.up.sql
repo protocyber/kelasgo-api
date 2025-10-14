@@ -140,8 +140,6 @@ CREATE TABLE
 CREATE TABLE
   users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    tenant_id UUID NOT NULL,
-    role_id UUID,
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100) UNIQUE,
@@ -151,6 +149,19 @@ CREATE TABLE
     phone VARCHAR(20),
     address TEXT,
     is_active BOOLEAN DEFAULT TRUE
+  );
+
+-- ======================================================
+-- TENANT USERS (many-to-many relationship between users and tenants)
+-- ======================================================
+CREATE TABLE
+  tenant_users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    tenant_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (tenant_id, user_id)
   );
 
 -- =======================
@@ -182,7 +193,7 @@ CREATE TABLE
   teachers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     tenant_id UUID NOT NULL,
-    user_id UUID UNIQUE NOT NULL,
+    tenant_user_id UUID NOT NULL,
     employee_number VARCHAR(50) UNIQUE,
     hire_date DATE,
     department_id UUID,
@@ -237,7 +248,7 @@ CREATE TABLE
   students (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     tenant_id UUID NOT NULL,
-    user_id UUID UNIQUE NOT NULL,
+    tenant_user_id UUID NOT NULL,
     student_number VARCHAR(50) UNIQUE NOT NULL,
     admission_date DATE NOT NULL,
     class_id UUID,
@@ -407,8 +418,8 @@ ADD CONSTRAINT fk_invoices_subscription_id FOREIGN KEY (subscription_id) REFEREN
 ALTER TABLE tenant_features ADD CONSTRAINT fk_tenant_features_tenant_id FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE,
 ADD CONSTRAINT fk_tenant_features_feature_id FOREIGN KEY (feature_id) REFERENCES feature_flags (id) ON DELETE CASCADE;
 
-ALTER TABLE users ADD CONSTRAINT fk_users_tenant_id FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE,
-ADD CONSTRAINT fk_users_role_id FOREIGN KEY (role_id) REFERENCES roles (id) ON DELETE SET NULL;
+ALTER TABLE tenant_users ADD CONSTRAINT fk_tenant_users_tenant_id FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE,
+ADD CONSTRAINT fk_tenant_users_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;
 
 ALTER TABLE user_roles ADD CONSTRAINT fk_user_roles_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
 ADD CONSTRAINT fk_user_roles_role_id FOREIGN KEY (role_id) REFERENCES roles (id) ON DELETE CASCADE;
@@ -416,7 +427,7 @@ ADD CONSTRAINT fk_user_roles_role_id FOREIGN KEY (role_id) REFERENCES roles (id)
 ALTER TABLE departments ADD CONSTRAINT fk_departments_tenant_id FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE;
 
 ALTER TABLE teachers ADD CONSTRAINT fk_teachers_tenant_id FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE,
-ADD CONSTRAINT fk_teachers_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+ADD CONSTRAINT fk_teachers_tenant_user_id FOREIGN KEY (tenant_user_id) REFERENCES tenant_users (id) ON DELETE CASCADE,
 ADD CONSTRAINT fk_teachers_department_id FOREIGN KEY (department_id) REFERENCES departments (id) ON DELETE SET NULL;
 
 ALTER TABLE departments ADD CONSTRAINT fk_departments_head_teacher_id FOREIGN KEY (head_teacher_id) REFERENCES teachers (id) ON DELETE SET NULL;
@@ -430,7 +441,7 @@ ADD CONSTRAINT fk_classes_homeroom_teacher_id FOREIGN KEY (homeroom_teacher_id) 
 ADD CONSTRAINT fk_classes_academic_year_id FOREIGN KEY (academic_year_id) REFERENCES academic_years (id) ON DELETE SET NULL;
 
 ALTER TABLE students ADD CONSTRAINT fk_students_tenant_id FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE,
-ADD CONSTRAINT fk_students_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+ADD CONSTRAINT fk_students_tenant_user_id FOREIGN KEY (tenant_user_id) REFERENCES tenant_users (id) ON DELETE CASCADE,
 ADD CONSTRAINT fk_students_class_id FOREIGN KEY (class_id) REFERENCES classes (id) ON DELETE SET NULL,
 ADD CONSTRAINT fk_students_parent_id FOREIGN KEY (parent_id) REFERENCES parents (id) ON DELETE SET NULL;
 
@@ -471,9 +482,16 @@ ADD CONSTRAINT fk_student_fees_academic_year_id FOREIGN KEY (academic_year_id) R
 -- PERFORMANCE INDEXES
 -- ======================================================
 -- Indexes for common queries
-CREATE INDEX idx_users_tenant_id ON users (tenant_id);
+-- Tenant Users indexes
+CREATE INDEX idx_tenant_users_tenant_id ON tenant_users (tenant_id);
 
-CREATE INDEX idx_users_role_id ON users (role_id);
+CREATE INDEX idx_tenant_users_user_id ON tenant_users (user_id);
+
+CREATE INDEX idx_tenant_users_is_active ON tenant_users (is_active);
+
+CREATE INDEX idx_tenant_users_tenant_user ON tenant_users (tenant_id, user_id);
+
+CREATE INDEX idx_tenant_users_user_active ON tenant_users (user_id, is_active);
 
 CREATE INDEX idx_users_email ON users (email);
 
@@ -487,9 +505,7 @@ CREATE INDEX idx_departments_tenant_id ON departments (tenant_id);
 
 CREATE INDEX idx_departments_head_teacher_id ON departments (head_teacher_id);
 
-CREATE INDEX idx_teachers_tenant_id ON teachers (tenant_id);
-
-CREATE INDEX idx_teachers_user_id ON teachers (user_id);
+CREATE INDEX idx_teachers_tenant_user_id ON teachers (tenant_user_id);
 
 CREATE INDEX idx_teachers_department_id ON teachers (department_id);
 
@@ -515,9 +531,7 @@ CREATE INDEX idx_classes_academic_year_id ON classes (academic_year_id);
 
 CREATE INDEX idx_classes_grade_level ON classes (grade_level);
 
-CREATE INDEX idx_students_tenant_id ON students (tenant_id);
-
-CREATE INDEX idx_students_user_id ON students (user_id);
+CREATE INDEX idx_students_tenant_user_id ON students (tenant_user_id);
 
 CREATE INDEX idx_students_student_number ON students (student_number);
 
@@ -616,8 +630,6 @@ WHERE
   status IN ('unpaid', 'overdue');
 
 -- Composite indexes for common query patterns
-CREATE INDEX idx_users_role_active ON users (role_id, is_active);
-
 CREATE INDEX idx_attendance_student_date_status ON attendance (student_id, attendance_date, status);
 
 CREATE INDEX idx_grades_enrollment_type ON grades (enrollment_id, grade_type);
@@ -635,11 +647,10 @@ CREATE INDEX idx_invoices_status_due ON invoices (status, due_date);
 CREATE INDEX idx_invoices_tenant_unpaid ON invoices (tenant_id, status) WHERE status IN ('unpaid', 'overdue');
 
 -- User management and authentication indexes
-CREATE INDEX idx_users_tenant_email ON users (tenant_id, email);
-CREATE INDEX idx_users_tenant_username ON users (tenant_id, username);
+CREATE INDEX idx_users_email_username ON users (email, username);
 CREATE INDEX idx_user_roles_role_id ON user_roles (role_id);
-CREATE INDEX idx_teachers_tenant_active ON teachers (tenant_id, user_id);
-CREATE INDEX idx_students_tenant_active ON students (tenant_id, user_id);
+CREATE INDEX idx_teachers_tenant_user_active ON teachers (tenant_user_id);
+CREATE INDEX idx_students_tenant_user_active ON students (tenant_user_id);
 
 -- Academic performance indexes
 CREATE INDEX idx_classes_tenant_year ON classes (tenant_id, academic_year_id);
@@ -705,7 +716,7 @@ VALUES
 -- =========================================
 
 -- Enable RLS per tenant on all tenant-based tables
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE teachers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
@@ -742,7 +753,7 @@ BEGIN
     FOR tbl IN
         SELECT tablename FROM pg_tables
         WHERE schemaname = 'public'
-        AND tablename IN ('users','teachers','students','subjects','classes','class_subjects','academic_years','attendance', 'grades','enrollments','schedules','departments','parents','notifications','student_fees','fee_types','tenant_features')
+        AND tablename IN ('tenant_users','teachers','students','subjects','classes','class_subjects','academic_years','attendance', 'grades','enrollments','schedules','departments','parents','notifications','student_fees','fee_types','tenant_features')
     LOOP
         EXECUTE format(
             'CREATE POLICY tenant_isolation ON %I
