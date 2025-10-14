@@ -1,18 +1,20 @@
 package model
 
 import (
-	"github.com/google/uuid"
+	"time"
 )
 
 // Parent represents the parents table
 type Parent struct {
 	BaseModel
-	TenantID     uuid.UUID `gorm:"type:uuid;not null;index" json:"tenant_id"`
-	FullName     string    `gorm:"size:100;not null" json:"full_name"`
-	Phone        *string   `gorm:"size:20" json:"phone,omitempty"`
-	Email        *string   `gorm:"size:100" json:"email,omitempty"`
-	Address      *string   `gorm:"type:text" json:"address,omitempty"`
-	Relationship *string   `gorm:"size:50" json:"relationship,omitempty"`
+	FullName     string     `gorm:"size:100;not null" json:"full_name"`
+	Phone        *string    `gorm:"size:20" json:"phone,omitempty"`
+	Email        *string    `gorm:"size:100" json:"email,omitempty"`
+	Address      *string    `gorm:"type:text" json:"address,omitempty"`
+	Relationship *string    `gorm:"size:50" json:"relationship,omitempty"`
+	Birthplace   *string    `gorm:"size:100" json:"birthplace,omitempty"`
+	Birthday     *time.Time `gorm:"type:date" json:"birthday,omitempty"`
+	Gender       *Gender    `gorm:"type:gender_enum" json:"gender,omitempty"`
 
 	// Relationships
 	Students []Student `gorm:"foreignKey:ParentID;constraint:OnDelete:SET NULL" json:"students,omitempty"`

@@ -12,7 +12,9 @@ type CreateUserRequest struct {
 	Password    string     `json:"password" validate:"required,min=6"`
 	Email       string     `json:"email" validate:"omitempty,email,max=100"`
 	FullName    string     `json:"full_name" validate:"required,max=100"`
-	Gender      *string    `json:"gender" validate:"omitempty,oneof=Male Female"`
+	Birthplace  *string    `json:"birthplace" validate:"omitempty,max=100"`
+	Birthday    *time.Time `json:"birthday,omitempty"`
+	Gender      *Gender    `json:"gender" validate:"omitempty,oneof=male female"`
 	DateOfBirth *time.Time `json:"date_of_birth,omitempty"`
 	Phone       *string    `json:"phone" validate:"omitempty,max=20"`
 	Address     *string    `json:"address,omitempty"`
@@ -23,7 +25,9 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Email       *string    `json:"email" validate:"omitempty,email,max=100"`
 	FullName    *string    `json:"full_name" validate:"omitempty,max=100"`
-	Gender      *string    `json:"gender" validate:"omitempty,oneof=Male Female"`
+	Birthplace  *string    `json:"birthplace" validate:"omitempty,max=100"`
+	Birthday    *time.Time `json:"birthday,omitempty"`
+	Gender      *Gender    `json:"gender" validate:"omitempty,oneof=male female"`
 	DateOfBirth *time.Time `json:"date_of_birth,omitempty"`
 	Phone       *string    `json:"phone" validate:"omitempty,max=20"`
 	Address     *string    `json:"address,omitempty"`

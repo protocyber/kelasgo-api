@@ -7,7 +7,7 @@ import (
 // Schedule DTOs
 type CreateScheduleRequest struct {
 	ClassSubjectID *uuid.UUID `json:"class_subject_id" validate:"omitempty,uuid"`
-	DayOfWeek      string     `json:"day_of_week" validate:"required,oneof=Monday Tuesday Wednesday Thursday Friday Saturday"`
+	DayOfWeek      DayOfWeek  `json:"day_of_week" validate:"required,oneof=senin selasa rabu kamis jumat sabtu minggu"`
 	StartTime      string     `json:"start_time" validate:"required"`
 	EndTime        string     `json:"end_time" validate:"required"`
 	Room           *string    `json:"room" validate:"omitempty,max=50"`
@@ -15,7 +15,7 @@ type CreateScheduleRequest struct {
 
 type UpdateScheduleRequest struct {
 	ClassSubjectID *uuid.UUID `json:"class_subject_id" validate:"omitempty,uuid"`
-	DayOfWeek      *string    `json:"day_of_week" validate:"omitempty,oneof=Monday Tuesday Wednesday Thursday Friday Saturday"`
+	DayOfWeek      *DayOfWeek `json:"day_of_week" validate:"omitempty,oneof=senin selasa rabu kamis jumat sabtu minggu"`
 	StartTime      *string    `json:"start_time,omitempty"`
 	EndTime        *string    `json:"end_time,omitempty"`
 	Room           *string    `json:"room" validate:"omitempty,max=50"`

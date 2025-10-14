@@ -78,7 +78,9 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 		PasswordHash: hashedPassword,
 		Email:        req.Email,
 		FullName:     req.FullName,
-		Gender:       req.Gender,
+		Birthplace:   req.Birthplace,
+		Birthday:     req.Birthday,
+		Gender:       (*model.Gender)(req.Gender),
 		DateOfBirth:  req.DateOfBirth,
 		Phone:        req.Phone,
 		Address:      req.Address,
@@ -185,8 +187,14 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 	if req.FullName != nil && *req.FullName != "" {
 		user.FullName = *req.FullName
 	}
+	if req.Birthplace != nil {
+		user.Birthplace = req.Birthplace
+	}
+	if req.Birthday != nil {
+		user.Birthday = req.Birthday
+	}
 	if req.Gender != nil {
-		user.Gender = req.Gender
+		user.Gender = (*model.Gender)(req.Gender)
 	}
 	if req.DateOfBirth != nil {
 		user.DateOfBirth = req.DateOfBirth

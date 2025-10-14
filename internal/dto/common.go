@@ -1,5 +1,25 @@
 package dto
 
+// Enums to match database schema
+type Gender string
+
+const (
+	GenderMale   Gender = "male"
+	GenderFemale Gender = "female"
+)
+
+type DayOfWeek string
+
+const (
+	DayMonday    DayOfWeek = "senin"
+	DayTuesday   DayOfWeek = "selasa"
+	DayWednesday DayOfWeek = "rabu"
+	DayThursday  DayOfWeek = "kamis"
+	DayFriday    DayOfWeek = "jumat"
+	DaySaturday  DayOfWeek = "sabtu"
+	DaySunday    DayOfWeek = "minggu"
+)
+
 // Common response structures
 type Response struct {
 	Success bool        `json:"success"`

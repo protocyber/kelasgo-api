@@ -10,10 +10,10 @@ import (
 type AttendanceStatus string
 
 const (
-	AttendancePresent AttendanceStatus = "Present"
-	AttendanceAbsent  AttendanceStatus = "Absent"
-	AttendanceLate    AttendanceStatus = "Late"
-	AttendanceExcused AttendanceStatus = "Excused"
+	AttendancePresent AttendanceStatus = "present"
+	AttendanceAbsent  AttendanceStatus = "absent"
+	AttendanceLate    AttendanceStatus = "late"
+	AttendanceExcused AttendanceStatus = "excused"
 )
 
 // Attendance represents the attendance table

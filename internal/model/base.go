@@ -8,6 +8,26 @@ import (
 	"gorm.io/gorm"
 )
 
+// Enums to match database schema
+type Gender string
+
+const (
+	GenderMale   Gender = "male"
+	GenderFemale Gender = "female"
+)
+
+type DayOfWeek string
+
+const (
+	DayMonday    DayOfWeek = "senin"
+	DayTuesday   DayOfWeek = "selasa"
+	DayWednesday DayOfWeek = "rabu"
+	DayThursday  DayOfWeek = "kamis"
+	DayFriday    DayOfWeek = "jumat"
+	DaySaturday  DayOfWeek = "sabtu"
+	DaySunday    DayOfWeek = "minggu"
+)
+
 // BaseModel contains common fields for all models with tenant support
 type BaseModel struct {
 	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`

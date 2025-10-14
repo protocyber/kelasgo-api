@@ -14,6 +14,9 @@ type CreateTeacherRequest struct {
 	DepartmentID   *uuid.UUID `json:"department_id" validate:"omitempty,uuid"`
 	Qualification  *string    `json:"qualification" validate:"omitempty,max=100"`
 	Position       *string    `json:"position" validate:"omitempty,max=100"`
+	Birthplace     *string    `json:"birthplace" validate:"omitempty,max=100"`
+	Birthday       *time.Time `json:"birthday,omitempty"`
+	Gender         *Gender    `json:"gender" validate:"omitempty,oneof=male female"`
 }
 
 type UpdateTeacherRequest struct {
@@ -22,6 +25,9 @@ type UpdateTeacherRequest struct {
 	DepartmentID   *uuid.UUID `json:"department_id" validate:"omitempty,uuid"`
 	Qualification  *string    `json:"qualification" validate:"omitempty,max=100"`
 	Position       *string    `json:"position" validate:"omitempty,max=100"`
+	Birthplace     *string    `json:"birthplace" validate:"omitempty,max=100"`
+	Birthday       *time.Time `json:"birthday,omitempty"`
+	Gender         *Gender    `json:"gender" validate:"omitempty,oneof=male female"`
 }
 
 type TeacherQueryParams struct {

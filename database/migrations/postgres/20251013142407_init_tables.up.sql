@@ -13,7 +13,9 @@ CREATE TYPE fee_status_enum AS ENUM ('paid', 'unpaid', 'partial', 'overdue');
 CREATE TYPE subscription_status_enum AS ENUM ('active', 'inactive', 'cancelled', 'expired', 'trial');
 CREATE TYPE subscription_plan_status_enum AS ENUM ('active', 'inactive', 'cancelled', 'expired');
 CREATE TYPE invoice_status_enum AS ENUM ('draft', 'sent', 'paid', 'unpaid', 'overdue', 'cancelled');
-CREATE TYPE attendance_status_enum AS ENUM ('Present', 'Absent', 'Late', 'Excused');
+CREATE TYPE attendance_status_enum AS ENUM ('present', 'absent', 'late', 'excused');
+CREATE TYPE gender_enum AS ENUM ('male', 'female');
+CREATE TYPE day_of_week_enum AS ENUM ('senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu');
 
 -- ======================================================
 -- SUBSCRIPTION PLANS
@@ -144,7 +146,9 @@ CREATE TABLE
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100) UNIQUE,
     full_name VARCHAR(100) NOT NULL,
-    gender VARCHAR(10) CHECK (gender IN ('Male', 'Female')),
+    birthplace VARCHAR(100),
+    birthday DATE,
+    gender gender_enum,
     date_of_birth DATE,
     phone VARCHAR(20),
     address TEXT,
@@ -198,7 +202,10 @@ CREATE TABLE
     hire_date DATE,
     department_id UUID,
     qualification VARCHAR(100),
-    position VARCHAR(100)
+    position VARCHAR(100),
+    birthplace VARCHAR(100),
+    birthday DATE,
+    gender gender_enum
   );
 
 -- ======================================================
@@ -212,7 +219,10 @@ CREATE TABLE
     phone VARCHAR(20),
     email VARCHAR(100),
     address TEXT,
-    relationship VARCHAR(50)
+    relationship VARCHAR(50),
+    birthplace VARCHAR(100),
+    birthday DATE,
+    gender gender_enum
   );
 
 -- ======================================================
@@ -290,16 +300,7 @@ CREATE TABLE
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     tenant_id UUID NOT NULL,
     class_subject_id UUID,
-    day_of_week VARCHAR(15) CHECK (
-      day_of_week IN (
-        'Monday',
-        'Tuesday',
-        'Wednesday',
-        'Thursday',
-        'Friday',
-        'Saturday'
-      )
-    ),
+    day_of_week day_of_week_enum,
     start_time TIME,
     end_time TIME,
     room VARCHAR(50)

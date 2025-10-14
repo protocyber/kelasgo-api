@@ -9,13 +9,15 @@ import (
 // Teacher represents the teachers table
 type Teacher struct {
 	BaseModel
-	TenantID       uuid.UUID  `gorm:"type:uuid;not null;index" json:"tenant_id"`
 	TenantUserID   uuid.UUID  `gorm:"type:uuid;not null;index" json:"tenant_user_id"`
 	EmployeeNumber *string    `gorm:"size:50;uniqueIndex" json:"employee_number,omitempty"`
 	HireDate       *time.Time `gorm:"type:date" json:"hire_date,omitempty"`
 	DepartmentID   *uuid.UUID `gorm:"type:uuid;index" json:"department_id,omitempty"`
 	Qualification  *string    `gorm:"size:100" json:"qualification,omitempty"`
 	Position       *string    `gorm:"size:100" json:"position,omitempty"`
+	Birthplace     *string    `gorm:"size:100" json:"birthplace,omitempty"`
+	Birthday       *time.Time `gorm:"type:date" json:"birthday,omitempty"`
+	Gender         *Gender    `gorm:"type:gender_enum" json:"gender,omitempty"`
 
 	// Relationships
 	TenantUser      *TenantUser    `gorm:"foreignKey:TenantUserID;constraint:OnDelete:CASCADE" json:"tenant_user,omitempty"`
