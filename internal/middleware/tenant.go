@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/database"
+	"github.com/rs/zerolog/log"
 )
 
 // TenantContextKey is the key used to store tenant ID in context
@@ -48,6 +49,13 @@ func TenantMiddleware(db *database.DatabaseConnections) gin.HandlerFunc {
 		if tenantIDStr != "" {
 			tenantID, err = uuid.Parse(tenantIDStr)
 			if err != nil {
+				log.Error().
+					Err(err).
+					Str("tenant_id_str", tenantIDStr).
+					Str("remote_ip", c.ClientIP()).
+					Str("uri", c.Request.URL.Path).
+					Str("host", c.Request.Host).
+					Msg("Invalid tenant ID format provided")
 				// If tenant ID is not a valid UUID, you might want to look it up by name/slug
 				// For now, we'll return an error
 				c.JSON(http.StatusBadRequest, gin.H{
@@ -60,6 +68,12 @@ func TenantMiddleware(db *database.DatabaseConnections) gin.HandlerFunc {
 
 			// Set PostgreSQL session variable for Row Level Security
 			if err := setTenantContext(db, tenantID); err != nil {
+				log.Error().
+					Err(err).
+					Str("tenant_id", tenantID.String()).
+					Str("remote_ip", c.ClientIP()).
+					Str("uri", c.Request.URL.Path).
+					Msg("Failed to set tenant context in database")
 				c.JSON(http.StatusInternalServerError, gin.H{
 					"error":   "Failed to set tenant context",
 					"message": "Unable to establish tenant isolation",
@@ -67,6 +81,11 @@ func TenantMiddleware(db *database.DatabaseConnections) gin.HandlerFunc {
 				c.Abort()
 				return
 			}
+
+			log.Debug().
+				Str("tenant_id", tenantID.String()).
+				Str("uri", c.Request.URL.Path).
+				Msg("Tenant context established successfully")
 		}
 
 		// Add tenant ID to context (even if empty - some operations might not require tenant)
@@ -85,6 +104,13 @@ func RequireTenant() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tenantID, exists := c.Get(string(TenantIDKey))
 		if !exists || tenantID == nil || tenantID == uuid.Nil {
+			log.Warn().
+				Str("remote_ip", c.ClientIP()).
+				Str("uri", c.Request.URL.Path).
+				Str("method", c.Request.Method).
+				Interface("tenant_id", tenantID).
+				Bool("exists", exists).
+				Msg("Request blocked due to missing tenant ID")
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Tenant ID required",
 				"message": "This operation requires a valid tenant ID",
@@ -146,12 +172,22 @@ func setTenantContext(db *database.DatabaseConnections, tenantID uuid.UUID) erro
 
 	// Set on write connection
 	if err := db.Write.Exec(sql, tenantID.String()).Error; err != nil {
+		log.Error().
+			Err(err).
+			Str("tenant_id", tenantID.String()).
+			Str("connection", "write").
+			Msg("Failed to set tenant context on write connection")
 		return err
 	}
 
 	// Set on read connection (if different from write)
 	if db.Read != db.Write {
 		if err := db.Read.Exec(sql, tenantID.String()).Error; err != nil {
+			log.Error().
+				Err(err).
+				Str("tenant_id", tenantID.String()).
+				Str("connection", "read").
+				Msg("Failed to set tenant context on read connection")
 			return err
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/protocyber/kelasgo-api/internal/dto"
 	"github.com/protocyber/kelasgo-api/internal/middleware"
 	"github.com/protocyber/kelasgo-api/internal/service"
+	"github.com/rs/zerolog/log"
 )
 
 // UserHandler handles user related requests
@@ -29,6 +30,11 @@ func NewUserHandler(userService service.UserService, validator *validator.Valida
 func (h *UserHandler) Create(c *gin.Context) {
 	var req dto.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Error().
+			Err(err).
+			Str("remote_ip", c.ClientIP()).
+			Str("user_agent", c.Request.UserAgent()).
+			Msg("Failed to bind create user request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Invalid request body",
@@ -38,6 +44,12 @@ func (h *UserHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
+		log.Warn().
+			Err(err).
+			Str("username", req.Username).
+			Str("email", req.Email).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Create user request validation failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Validation failed",
@@ -49,6 +61,10 @@ func (h *UserHandler) Create(c *gin.Context) {
 	// Get tenant ID from middleware context
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == uuid.Nil {
+		log.Error().
+			Str("username", req.Username).
+			Str("remote_ip", c.ClientIP()).
+			Msg("User creation attempt without valid tenant ID")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Tenant ID required",
@@ -59,6 +75,13 @@ func (h *UserHandler) Create(c *gin.Context) {
 
 	user, err := h.userService.Create(tenantID, req)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("username", req.Username).
+			Str("email", req.Email).
+			Str("tenant_id", tenantID.String()).
+			Str("remote_ip", c.ClientIP()).
+			Msg("User creation failed in handler")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Failed to create user",
@@ -66,6 +89,13 @@ func (h *UserHandler) Create(c *gin.Context) {
 		})
 		return
 	}
+
+	log.Info().
+		Str("user_id", user.ID.String()).
+		Str("username", user.Username).
+		Str("tenant_id", tenantID.String()).
+		Str("remote_ip", c.ClientIP()).
+		Msg("User created successfully via handler")
 
 	c.JSON(http.StatusCreated, dto.Response{
 		Success: true,
@@ -79,6 +109,11 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("id_param", idStr).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Invalid user ID format in get request")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Invalid user ID format",
@@ -89,6 +124,11 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 
 	user, err := h.userService.GetByID(id)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Failed to get user by ID in handler")
 		c.JSON(http.StatusNotFound, dto.Response{
 			Success: false,
 			Message: "User not found",
@@ -96,6 +136,12 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 		})
 		return
 	}
+
+	log.Debug().
+		Str("user_id", id.String()).
+		Str("username", user.Username).
+		Str("remote_ip", c.ClientIP()).
+		Msg("User retrieved successfully")
 
 	c.JSON(http.StatusOK, dto.Response{
 		Success: true,
@@ -109,6 +155,11 @@ func (h *UserHandler) Update(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("id_param", idStr).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Invalid user ID format in update request")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Invalid user ID format",
@@ -119,6 +170,11 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 	var req dto.UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Failed to bind update user request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Invalid request body",
@@ -128,6 +184,11 @@ func (h *UserHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
+		log.Warn().
+			Err(err).
+			Str("user_id", id.String()).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Update user request validation failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Validation failed",
@@ -138,6 +199,11 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 	user, err := h.userService.Update(id, req)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Str("remote_ip", c.ClientIP()).
+			Msg("User update failed in handler")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Failed to update user",
@@ -145,6 +211,12 @@ func (h *UserHandler) Update(c *gin.Context) {
 		})
 		return
 	}
+
+	log.Info().
+		Str("user_id", id.String()).
+		Str("username", user.Username).
+		Str("remote_ip", c.ClientIP()).
+		Msg("User updated successfully via handler")
 
 	c.JSON(http.StatusOK, dto.Response{
 		Success: true,
@@ -158,6 +230,11 @@ func (h *UserHandler) Delete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("id_param", idStr).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Invalid user ID format in delete request")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Invalid user ID format",
@@ -168,6 +245,11 @@ func (h *UserHandler) Delete(c *gin.Context) {
 
 	err = h.userService.Delete(id)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Str("remote_ip", c.ClientIP()).
+			Msg("User deletion failed in handler")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Failed to delete user",
@@ -175,6 +257,11 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		})
 		return
 	}
+
+	log.Info().
+		Str("user_id", id.String()).
+		Str("remote_ip", c.ClientIP()).
+		Msg("User deleted successfully via handler")
 
 	c.JSON(http.StatusOK, dto.Response{
 		Success: true,
@@ -186,6 +273,10 @@ func (h *UserHandler) Delete(c *gin.Context) {
 func (h *UserHandler) List(c *gin.Context) {
 	var params dto.UserQueryParams
 	if err := c.ShouldBindQuery(&params); err != nil {
+		log.Error().
+			Err(err).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Failed to bind user list query parameters")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Invalid query parameters",
@@ -195,6 +286,13 @@ func (h *UserHandler) List(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(params); err != nil {
+		log.Warn().
+			Err(err).
+			Int("page", params.Page).
+			Int("limit", params.Limit).
+			Str("search", params.Search).
+			Str("remote_ip", c.ClientIP()).
+			Msg("User list query parameters validation failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Validation failed",
@@ -206,6 +304,9 @@ func (h *UserHandler) List(c *gin.Context) {
 	// Get tenant ID from middleware context
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == uuid.Nil {
+		log.Error().
+			Str("remote_ip", c.ClientIP()).
+			Msg("User listing attempt without valid tenant ID")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Tenant ID required",
@@ -216,6 +317,14 @@ func (h *UserHandler) List(c *gin.Context) {
 
 	users, meta, err := h.userService.List(tenantID, params)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("tenant_id", tenantID.String()).
+			Int("page", params.Page).
+			Int("limit", params.Limit).
+			Str("search", params.Search).
+			Str("remote_ip", c.ClientIP()).
+			Msg("User listing failed in handler")
 		c.JSON(http.StatusInternalServerError, dto.Response{
 			Success: false,
 			Message: "Failed to retrieve users",
@@ -223,6 +332,14 @@ func (h *UserHandler) List(c *gin.Context) {
 		})
 		return
 	}
+
+	log.Debug().
+		Str("tenant_id", tenantID.String()).
+		Int("page", params.Page).
+		Int("limit", params.Limit).
+		Int64("total_users", meta.TotalRows).
+		Str("remote_ip", c.ClientIP()).
+		Msg("Users listed successfully")
 
 	c.JSON(http.StatusOK, dto.PaginatedResponse{
 		Success: true,

@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/database"
 	"github.com/protocyber/kelasgo-api/internal/model"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -36,9 +37,22 @@ func NewTenantUserRepository(db *database.DatabaseConnections) TenantUserReposit
 
 func (r *tenantUserRepository) Create(tenantUser *model.TenantUser) error {
 	if err := r.SetTenantContext(tenantUser.TenantID); err != nil {
+		log.Error().
+			Err(err).
+			Str("tenant_id", tenantUser.TenantID.String()).
+			Str("user_id", tenantUser.UserID.String()).
+			Msg("Failed to set tenant context for tenant-user creation")
 		return err
 	}
-	return r.db.Write.Create(tenantUser).Error
+	err := r.db.Write.Create(tenantUser).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("tenant_id", tenantUser.TenantID.String()).
+			Str("user_id", tenantUser.UserID.String()).
+			Msg("Failed to create tenant-user relationship in database")
+	}
+	return err
 }
 
 func (r *tenantUserRepository) GetByID(id uuid.UUID) (*model.TenantUser, error) {
@@ -112,9 +126,22 @@ func (r *tenantUserRepository) GetByUser(userID uuid.UUID, offset, limit int) ([
 
 func (r *tenantUserRepository) Update(tenantUser *model.TenantUser) error {
 	if err := r.SetTenantContext(tenantUser.TenantID); err != nil {
+		log.Error().
+			Err(err).
+			Str("tenant_id", tenantUser.TenantID.String()).
+			Str("user_id", tenantUser.UserID.String()).
+			Msg("Failed to set tenant context for tenant-user update")
 		return err
 	}
-	return r.db.Write.Save(tenantUser).Error
+	err := r.db.Write.Save(tenantUser).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("tenant_id", tenantUser.TenantID.String()).
+			Str("user_id", tenantUser.UserID.String()).
+			Msg("Failed to update tenant-user relationship in database")
+	}
+	return err
 }
 
 func (r *tenantUserRepository) Delete(id uuid.UUID) error {

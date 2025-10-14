@@ -8,6 +8,7 @@ import (
 	"github.com/protocyber/kelasgo-api/internal/model"
 	"github.com/protocyber/kelasgo-api/internal/repository"
 	"github.com/protocyber/kelasgo-api/internal/util"
+	"github.com/rs/zerolog/log"
 )
 
 // AuthService interface defines authentication service methods
@@ -51,6 +52,11 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 	if req.TenantID != "" {
 		tenantID, err = uuid.Parse(req.TenantID)
 		if err != nil {
+			log.Error().
+				Err(err).
+				Str("tenant_id", req.TenantID).
+				Str("username", req.Username).
+				Msg("Failed to parse tenant ID during login")
 			return nil, errors.New("invalid tenant ID format")
 		}
 	}
@@ -58,16 +64,31 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 	// Get user by username and tenant
 	user, err := s.userRepo.GetByUsernameAndTenant(req.Username, tenantID)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("username", req.Username).
+			Str("tenant_id", tenantID.String()).
+			Msg("User not found during login attempt")
 		return nil, errors.New("invalid username or password")
 	}
 
 	// Check if user is active
 	if !user.IsActive {
+		log.Warn().
+			Str("user_id", user.ID.String()).
+			Str("username", req.Username).
+			Str("tenant_id", tenantID.String()).
+			Msg("Login attempt for deactivated user")
 		return nil, errors.New("user account is deactivated")
 	}
 
 	// Check password
 	if !util.CheckPassword(req.Password, user.PasswordHash) {
+		log.Warn().
+			Str("user_id", user.ID.String()).
+			Str("username", req.Username).
+			Str("tenant_id", tenantID.String()).
+			Msg("Invalid password during login attempt")
 		return nil, errors.New("invalid username or password")
 	}
 
@@ -86,6 +107,12 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 		roleName,
 	)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", user.ID.String()).
+			Str("username", user.Username).
+			Str("tenant_id", tenantID.String()).
+			Msg("Failed to generate JWT token during login")
 		return nil, errors.New("failed to generate token")
 	}
 
@@ -111,6 +138,10 @@ func (s *authService) Register(tenantID uuid.UUID, req dto.CreateUserRequest) (*
 	// Check if username already exists in this tenant
 	existingUser, _ := s.userRepo.GetByUsernameAndTenant(req.Username, tenantID)
 	if existingUser != nil {
+		log.Warn().
+			Str("username", req.Username).
+			Str("tenant_id", tenantID.String()).
+			Msg("Registration attempt with existing username")
 		return nil, errors.New("username already exists")
 	}
 
@@ -118,6 +149,10 @@ func (s *authService) Register(tenantID uuid.UUID, req dto.CreateUserRequest) (*
 	if req.Email != "" {
 		existingUser, _ = s.userRepo.GetByEmailAndTenant(req.Email, tenantID)
 		if existingUser != nil {
+			log.Warn().
+				Str("email", req.Email).
+				Str("tenant_id", tenantID.String()).
+				Msg("Registration attempt with existing email")
 			return nil, errors.New("email already exists")
 		}
 	}
@@ -125,6 +160,11 @@ func (s *authService) Register(tenantID uuid.UUID, req dto.CreateUserRequest) (*
 	// Hash password
 	hashedPassword, err := util.HashPassword(req.Password)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("username", req.Username).
+			Str("tenant_id", tenantID.String()).
+			Msg("Failed to hash password during registration")
 		return nil, errors.New("failed to hash password")
 	}
 
@@ -149,6 +189,11 @@ func (s *authService) Register(tenantID uuid.UUID, req dto.CreateUserRequest) (*
 
 	err = s.userRepo.Create(user)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("username", req.Username).
+			Str("tenant_id", tenantID.String()).
+			Msg("Failed to create user during registration")
 		return nil, errors.New("failed to create user")
 	}
 
@@ -161,6 +206,11 @@ func (s *authService) Register(tenantID uuid.UUID, req dto.CreateUserRequest) (*
 
 	err = s.tenantUserRepo.Create(tenantUser)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", user.ID.String()).
+			Str("tenant_id", tenantID.String()).
+			Msg("Failed to create tenant-user relationship during registration")
 		// If tenant-user creation fails, we should delete the user to maintain consistency
 		s.userRepo.Delete(user.ID)
 		return nil, errors.New("failed to create tenant-user relationship")
@@ -175,6 +225,12 @@ func (s *authService) Register(tenantID uuid.UUID, req dto.CreateUserRequest) (*
 
 		err = s.userRoleRepo.Create(userRole)
 		if err != nil {
+			log.Error().
+				Err(err).
+				Str("user_id", user.ID.String()).
+				Str("role_id", req.RoleID.String()).
+				Str("tenant_id", tenantID.String()).
+				Msg("Failed to create user-role relationship during registration")
 			// If user-role creation fails, cleanup user and tenant-user
 			s.tenantUserRepo.Delete(tenantUser.ID)
 			s.userRepo.Delete(user.ID)
@@ -189,17 +245,29 @@ func (s *authService) ChangePassword(userID uuid.UUID, req dto.ChangePasswordReq
 	// Get user
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", userID.String()).
+			Msg("User not found during password change")
 		return errors.New("user not found")
 	}
 
 	// Check current password
 	if !util.CheckPassword(req.CurrentPassword, user.PasswordHash) {
+		log.Warn().
+			Str("user_id", userID.String()).
+			Str("username", user.Username).
+			Msg("Incorrect current password during password change")
 		return errors.New("current password is incorrect")
 	}
 
 	// Hash new password
 	hashedPassword, err := util.HashPassword(req.NewPassword)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", userID.String()).
+			Msg("Failed to hash new password during password change")
 		return errors.New("failed to hash new password")
 	}
 
@@ -208,8 +276,17 @@ func (s *authService) ChangePassword(userID uuid.UUID, req dto.ChangePasswordReq
 
 	err = s.userRepo.Update(user)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", userID.String()).
+			Msg("Failed to update password in database")
 		return errors.New("failed to update password")
 	}
+
+	log.Info().
+		Str("user_id", userID.String()).
+		Str("username", user.Username).
+		Msg("Password changed successfully")
 
 	return nil
 }
@@ -218,6 +295,9 @@ func (s *authService) ValidateToken(token string) (*dto.TokenClaims, error) {
 	// Validate JWT token using JWT service
 	claims, err := s.jwtService.ValidateToken(token)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Msg("Token validation failed")
 		return nil, errors.New("invalid token")
 	}
 

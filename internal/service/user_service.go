@@ -9,6 +9,7 @@ import (
 	"github.com/protocyber/kelasgo-api/internal/model"
 	"github.com/protocyber/kelasgo-api/internal/repository"
 	"github.com/protocyber/kelasgo-api/internal/util"
+	"github.com/rs/zerolog/log"
 )
 
 // UserService interface defines user service methods
@@ -47,6 +48,10 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 	// Check if username already exists within tenant
 	existingUser, _ := s.userRepo.GetByUsernameAndTenant(req.Username, tenantID)
 	if existingUser != nil {
+		log.Warn().
+			Str("username", req.Username).
+			Str("tenant_id", tenantID.String()).
+			Msg("User creation attempt with existing username")
 		return nil, errors.New("username already exists")
 	}
 
@@ -54,6 +59,10 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 	if req.Email != "" {
 		existingUser, _ = s.userRepo.GetByEmailAndTenant(req.Email, tenantID)
 		if existingUser != nil {
+			log.Warn().
+				Str("email", req.Email).
+				Str("tenant_id", tenantID.String()).
+				Msg("User creation attempt with existing email")
 			return nil, errors.New("email already exists")
 		}
 	}
@@ -62,6 +71,11 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 	if req.RoleID != nil {
 		_, err := s.roleRepo.GetByID(*req.RoleID)
 		if err != nil {
+			log.Error().
+				Err(err).
+				Str("role_id", req.RoleID.String()).
+				Str("tenant_id", tenantID.String()).
+				Msg("Invalid role ID provided during user creation")
 			return nil, errors.New("invalid role ID")
 		}
 	}
@@ -69,6 +83,11 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 	// Hash password
 	hashedPassword, err := util.HashPassword(req.Password)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("username", req.Username).
+			Str("tenant_id", tenantID.String()).
+			Msg("Failed to hash password during user creation")
 		return nil, errors.New("failed to hash password")
 	}
 
@@ -93,6 +112,11 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 
 	err = s.userRepo.Create(user)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("username", req.Username).
+			Str("tenant_id", tenantID.String()).
+			Msg("Failed to create user in database")
 		return nil, errors.New("failed to create user")
 	}
 
@@ -105,6 +129,11 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 
 	err = s.tenantUserRepo.Create(tenantUser)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", user.ID.String()).
+			Str("tenant_id", tenantID.String()).
+			Msg("Failed to create tenant-user relationship")
 		// If tenant-user creation fails, we should delete the user to maintain consistency
 		s.userRepo.Delete(user.ID)
 		return nil, errors.New("failed to create tenant-user relationship")
@@ -119,6 +148,11 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 
 		err = s.userRoleRepo.Create(userRole)
 		if err != nil {
+			log.Error().
+				Err(err).
+				Str("user_id", user.ID.String()).
+				Str("role_id", req.RoleID.String()).
+				Msg("Failed to create user-role relationship")
 			// If user-role creation fails, cleanup user and tenant-user
 			s.tenantUserRepo.Delete(tenantUser.ID)
 			s.userRepo.Delete(user.ID)
@@ -126,17 +160,35 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 		}
 	}
 
+	log.Info().
+		Str("user_id", user.ID.String()).
+		Str("username", user.Username).
+		Str("tenant_id", tenantID.String()).
+		Msg("User created successfully")
+
 	return user, nil
 }
 
 func (s *userService) GetByID(id uuid.UUID) (*model.User, error) {
-	return s.userRepo.GetByID(id)
+	user, err := s.userRepo.GetByID(id)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Msg("Failed to get user by ID")
+		return nil, err
+	}
+	return user, nil
 }
 
 func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.User, error) {
 	// Get existing user
 	user, err := s.userRepo.GetByID(id)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Msg("User not found during update")
 		return nil, err
 	}
 
@@ -145,6 +197,9 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 	if len(user.TenantUsers) > 0 {
 		tenantID = user.TenantUsers[0].TenantID
 	} else {
+		log.Error().
+			Str("user_id", id.String()).
+			Msg("User is not associated with any tenant during update")
 		return nil, errors.New("user is not associated with any tenant")
 	}
 
@@ -152,6 +207,11 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 	if req.Email != nil && *req.Email != "" && *req.Email != user.Email {
 		existingUser, _ := s.userRepo.GetByEmailAndTenant(*req.Email, tenantID)
 		if existingUser != nil && existingUser.ID != id {
+			log.Warn().
+				Str("email", *req.Email).
+				Str("user_id", id.String()).
+				Str("tenant_id", tenantID.String()).
+				Msg("User update attempt with existing email")
 			return nil, errors.New("email already exists")
 		}
 	}
@@ -160,12 +220,21 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 	if req.RoleID != nil {
 		_, err := s.roleRepo.GetByID(*req.RoleID)
 		if err != nil {
+			log.Error().
+				Err(err).
+				Str("role_id", req.RoleID.String()).
+				Str("user_id", id.String()).
+				Msg("Invalid role ID provided during user update")
 			return nil, errors.New("invalid role ID")
 		}
 
 		// Delete existing user roles and create new one
 		err = s.userRoleRepo.DeleteAllUserRoles(user.ID)
 		if err != nil {
+			log.Error().
+				Err(err).
+				Str("user_id", id.String()).
+				Msg("Failed to delete existing user roles during update")
 			return nil, errors.New("failed to update user role")
 		}
 
@@ -176,6 +245,11 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 
 		err = s.userRoleRepo.Create(userRole)
 		if err != nil {
+			log.Error().
+				Err(err).
+				Str("user_id", id.String()).
+				Str("role_id", req.RoleID.String()).
+				Msg("Failed to create new user role during update")
 			return nil, errors.New("failed to create new user role")
 		}
 	}
@@ -214,6 +288,11 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 			tenantUser.IsActive = *req.IsActive
 			err = s.tenantUserRepo.Update(tenantUser)
 			if err != nil {
+				log.Error().
+					Err(err).
+					Str("user_id", id.String()).
+					Str("tenant_id", tenantID.String()).
+					Msg("Failed to update tenant-user status")
 				return nil, errors.New("failed to update tenant-user status")
 			}
 		}
@@ -221,20 +300,47 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 
 	err = s.userRepo.Update(user)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Msg("Failed to update user in database")
 		return nil, errors.New("failed to update user")
 	}
+
+	log.Info().
+		Str("user_id", id.String()).
+		Str("username", user.Username).
+		Msg("User updated successfully")
 
 	return user, nil
 }
 
 func (s *userService) Delete(id uuid.UUID) error {
 	// Check if user exists
-	_, err := s.userRepo.GetByID(id)
+	user, err := s.userRepo.GetByID(id)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Msg("User not found during delete")
 		return err
 	}
 
-	return s.userRepo.Delete(id)
+	err = s.userRepo.Delete(id)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Msg("Failed to delete user from database")
+		return err
+	}
+
+	log.Info().
+		Str("user_id", id.String()).
+		Str("username", user.Username).
+		Msg("User deleted successfully")
+
+	return nil
 }
 
 func (s *userService) List(tenantID uuid.UUID, params dto.UserQueryParams) ([]model.User, *dto.PaginationMeta, error) {
@@ -254,8 +360,26 @@ func (s *userService) List(tenantID uuid.UUID, params dto.UserQueryParams) ([]mo
 
 	if params.RoleID != nil {
 		users, total, err = s.userRepo.GetByRole(tenantID, *params.RoleID, offset, params.Limit)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("tenant_id", tenantID.String()).
+				Str("role_id", params.RoleID.String()).
+				Int("page", params.Page).
+				Int("limit", params.Limit).
+				Msg("Failed to get users by role")
+		}
 	} else {
 		users, total, err = s.userRepo.GetUsersByTenant(tenantID, offset, params.Limit, params.Search)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("tenant_id", tenantID.String()).
+				Str("search", params.Search).
+				Int("page", params.Page).
+				Int("limit", params.Limit).
+				Msg("Failed to get users by tenant")
+		}
 	}
 
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/protocyber/kelasgo-api/internal/dto"
 	"github.com/protocyber/kelasgo-api/internal/util"
+	"github.com/rs/zerolog/log"
 )
 
 // JWTMiddleware creates a JWT authentication middleware
@@ -16,6 +17,12 @@ func JWTMiddleware(jwtService *util.JWTService) gin.HandlerFunc {
 
 		tokenString, err := util.ExtractTokenFromAuthHeader(authHeader)
 		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("remote_ip", c.ClientIP()).
+				Str("user_agent", c.Request.UserAgent()).
+				Str("uri", c.Request.URL.Path).
+				Msg("Failed to extract token from authorization header")
 			c.JSON(http.StatusUnauthorized, dto.Response{
 				Success: false,
 				Message: "Unauthorized",
@@ -27,6 +34,12 @@ func JWTMiddleware(jwtService *util.JWTService) gin.HandlerFunc {
 
 		claims, err := jwtService.ValidateToken(tokenString)
 		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("remote_ip", c.ClientIP()).
+				Str("user_agent", c.Request.UserAgent()).
+				Str("uri", c.Request.URL.Path).
+				Msg("JWT token validation failed")
 			c.JSON(http.StatusUnauthorized, dto.Response{
 				Success: false,
 				Message: "Unauthorized",
@@ -52,6 +65,11 @@ func RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userRole, exists := c.Get("role")
 		if !exists {
+			log.Error().
+				Str("remote_ip", c.ClientIP()).
+				Str("uri", c.Request.URL.Path).
+				Strs("allowed_roles", allowedRoles).
+				Msg("User role not found in context during role check")
 			c.JSON(http.StatusUnauthorized, dto.Response{
 				Success: false,
 				Message: "Unauthorized",
@@ -63,6 +81,11 @@ func RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {
 
 		role, ok := userRole.(string)
 		if !ok {
+			log.Error().
+				Interface("user_role", userRole).
+				Str("remote_ip", c.ClientIP()).
+				Str("uri", c.Request.URL.Path).
+				Msg("Invalid user role format in context")
 			c.JSON(http.StatusUnauthorized, dto.Response{
 				Success: false,
 				Message: "Unauthorized",
@@ -82,6 +105,12 @@ func RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {
 		}
 
 		if !allowed {
+			log.Warn().
+				Str("user_role", role).
+				Strs("allowed_roles", allowedRoles).
+				Str("remote_ip", c.ClientIP()).
+				Str("uri", c.Request.URL.Path).
+				Msg("Insufficient permissions for role-based access")
 			c.JSON(http.StatusForbidden, dto.Response{
 				Success: false,
 				Message: "Forbidden",

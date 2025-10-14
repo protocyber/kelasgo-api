@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/database"
 	"github.com/protocyber/kelasgo-api/internal/model"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -33,9 +34,22 @@ func NewRoleRepository(db *database.DatabaseConnections) RoleRepository {
 
 func (r *roleRepository) Create(role *model.Role) error {
 	if err := r.SetTenantContext(role.TenantID); err != nil {
+		log.Error().
+			Err(err).
+			Str("role_name", role.Name).
+			Str("tenant_id", role.TenantID.String()).
+			Msg("Failed to set tenant context for role creation")
 		return err
 	}
-	return r.db.Write.Create(role).Error
+	err := r.db.Write.Create(role).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("role_name", role.Name).
+			Str("tenant_id", role.TenantID.String()).
+			Msg("Failed to create role in database")
+	}
+	return err
 }
 
 func (r *roleRepository) GetByID(id uuid.UUID) (*model.Role, error) {
@@ -43,8 +57,15 @@ func (r *roleRepository) GetByID(id uuid.UUID) (*model.Role, error) {
 	err := r.db.Read.First(&role, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Debug().
+				Str("role_id", id.String()).
+				Msg("Role not found by ID")
 			return nil, errors.New("role not found")
 		}
+		log.Error().
+			Err(err).
+			Str("role_id", id.String()).
+			Msg("Database error while getting role by ID")
 		return nil, err
 	}
 	return &role, nil

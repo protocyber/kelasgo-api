@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/protocyber/kelasgo-api/internal/middleware"
+	"github.com/protocyber/kelasgo-api/internal/util"
 	"github.com/rs/zerolog/log"
 )
 
@@ -21,7 +21,7 @@ func main() {
 	}
 
 	// Setup logger
-	middleware.SetupLogger(app.Config)
+	util.SetupLogger(app.Config)
 
 	// Perform database health check
 	if err := app.DBConns.HealthCheck(); err != nil {

@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/database"
 	"github.com/protocyber/kelasgo-api/internal/model"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -38,7 +39,15 @@ func NewUserRepository(db *database.DatabaseConnections) UserRepository {
 }
 
 func (r *userRepository) Create(user *model.User) error {
-	return r.db.Write.Create(user).Error
+	err := r.db.Write.Create(user).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("username", user.Username).
+			Str("email", user.Email).
+			Msg("Failed to create user in database")
+	}
+	return err
 }
 
 func (r *userRepository) GetByID(id uuid.UUID) (*model.User, error) {
@@ -46,8 +55,15 @@ func (r *userRepository) GetByID(id uuid.UUID) (*model.User, error) {
 	err := r.db.Read.Preload("TenantUsers").Preload("UserRoles.Role").First(&user, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Debug().
+				Str("user_id", id.String()).
+				Msg("User not found in database")
 			return nil, errors.New("user not found")
 		}
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Msg("Database error while getting user by ID")
 		return nil, err
 	}
 	return &user, nil
@@ -78,11 +94,26 @@ func (r *userRepository) GetByEmail(email string) (*model.User, error) {
 }
 
 func (r *userRepository) Update(user *model.User) error {
-	return r.db.Write.Save(user).Error
+	err := r.db.Write.Save(user).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", user.ID.String()).
+			Str("username", user.Username).
+			Msg("Failed to update user in database")
+	}
+	return err
 }
 
 func (r *userRepository) Delete(id uuid.UUID) error {
-	return r.db.Write.Delete(&model.User{}, id).Error
+	err := r.db.Write.Delete(&model.User{}, id).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", id.String()).
+			Msg("Failed to delete user from database")
+	}
+	return err
 }
 
 func (r *userRepository) List(offset, limit int, search string) ([]model.User, int64, error) {
@@ -98,11 +129,23 @@ func (r *userRepository) List(offset, limit int, search string) ([]model.User, i
 
 	// Get total count
 	if err := query.Model(&model.User{}).Count(&total).Error; err != nil {
+		log.Error().
+			Err(err).
+			Str("search", search).
+			Msg("Failed to count users in List method")
 		return nil, 0, err
 	}
 
 	// Get paginated results
 	err := query.Offset(offset).Limit(limit).Find(&users).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Int("offset", offset).
+			Int("limit", limit).
+			Str("search", search).
+			Msg("Failed to list users from database in List method")
+	}
 	return users, total, err
 }
 
@@ -153,6 +196,11 @@ func (r *userRepository) GetUsersByRole(roleID uuid.UUID, offset, limit int) ([]
 
 func (r *userRepository) GetByUsernameAndTenant(username string, tenantID uuid.UUID) (*model.User, error) {
 	if err := r.SetTenantContext(tenantID); err != nil {
+		log.Error().
+			Err(err).
+			Str("username", username).
+			Str("tenant_id", tenantID.String()).
+			Msg("Failed to set tenant context for GetByUsernameAndTenant")
 		return nil, err
 	}
 
@@ -164,8 +212,17 @@ func (r *userRepository) GetByUsernameAndTenant(username string, tenantID uuid.U
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Debug().
+				Str("username", username).
+				Str("tenant_id", tenantID.String()).
+				Msg("User not found by username and tenant")
 			return nil, errors.New("user not found")
 		}
+		log.Error().
+			Err(err).
+			Str("username", username).
+			Str("tenant_id", tenantID.String()).
+			Msg("Database error in GetByUsernameAndTenant")
 		return nil, err
 	}
 	return &user, nil

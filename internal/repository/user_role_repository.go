@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/database"
 	"github.com/protocyber/kelasgo-api/internal/model"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -32,7 +33,15 @@ func NewUserRoleRepository(db *database.DatabaseConnections) UserRoleRepository 
 }
 
 func (r *userRoleRepository) Create(userRole *model.UserRole) error {
-	return r.db.Write.Create(userRole).Error
+	err := r.db.Write.Create(userRole).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", userRole.UserID.String()).
+			Str("role_id", userRole.RoleID.String()).
+			Msg("Failed to create user-role relationship in database")
+	}
+	return err
 }
 
 func (r *userRoleRepository) GetByUserAndRole(userID, roleID uuid.UUID) (*model.UserRole, error) {
@@ -71,5 +80,12 @@ func (r *userRoleRepository) Delete(userID, roleID uuid.UUID) error {
 }
 
 func (r *userRoleRepository) DeleteAllUserRoles(userID uuid.UUID) error {
-	return r.db.Write.Where("user_id = ?", userID).Delete(&model.UserRole{}).Error
+	err := r.db.Write.Where("user_id = ?", userID).Delete(&model.UserRole{}).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", userID.String()).
+			Msg("Failed to delete all user roles from database")
+	}
+	return err
 }
