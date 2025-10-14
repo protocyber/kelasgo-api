@@ -33,7 +33,7 @@ func main() {
 	e := echo.New()
 
 	// Setup routes
-	SetupRoutes(e, app.Config, app.AuthHandler, app.UserHandler, app.JWTService)
+	SetupRoutes(e, app.Config, app.AuthHandler, app.UserHandler, app.JWTService, app.DBConns)
 
 	// Get server address
 	serverAddr := app.Config.GetServerAddress()
