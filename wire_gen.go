@@ -31,12 +31,14 @@ func InitializeApp() (*App, error) {
 	}
 	userRepository := repository.NewUserRepository(databaseConnections)
 	roleRepository := repository.NewRoleRepository(databaseConnections)
+	tenantUserRepository := repository.NewTenantUserRepository(databaseConnections)
+	userRoleRepository := repository.NewUserRoleRepository(databaseConnections)
 	v := ProvideJWTConfig(configConfig)
 	jwtService := util.NewJWTService(v)
-	authService := service.NewAuthService(userRepository, roleRepository, jwtService)
+	authService := service.NewAuthService(userRepository, roleRepository, tenantUserRepository, userRoleRepository, jwtService)
 	validate := ProvideValidator()
 	authHandler := handler.NewAuthHandler(authService, validate)
-	userService := service.NewUserService(userRepository, roleRepository)
+	userService := service.NewUserService(userRepository, roleRepository, tenantUserRepository, userRoleRepository)
 	userHandler := handler.NewUserHandler(userService, validate)
 	app := NewApp(authHandler, userHandler, databaseConnections, jwtService, configConfig)
 	return app, nil
@@ -56,7 +58,7 @@ type App struct {
 // ProviderSet contains all the wire providers
 var ProviderSet = wire.NewSet(config.Load, database.NewConnections, ProvideValidator,
 
-	ProvideJWTConfig, util.NewJWTService, repository.NewUserRepository, repository.NewRoleRepository, service.NewAuthService, service.NewUserService, handler.NewAuthHandler, handler.NewUserHandler, NewApp,
+	ProvideJWTConfig, util.NewJWTService, repository.NewUserRepository, repository.NewRoleRepository, repository.NewTenantUserRepository, repository.NewUserRoleRepository, service.NewAuthService, service.NewUserService, handler.NewAuthHandler, handler.NewUserHandler, NewApp,
 )
 
 // ProvideJWTConfig extracts JWT config from main config
