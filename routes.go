@@ -4,25 +4,14 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/protocyber/kelasgo-api/internal/config"
-	"github.com/protocyber/kelasgo-api/internal/database"
-	"github.com/protocyber/kelasgo-api/internal/handler"
 	"github.com/protocyber/kelasgo-api/internal/middleware"
-	"github.com/protocyber/kelasgo-api/internal/util"
 )
 
 // SetupRoutes configures all API routes
-func SetupRoutes(
-	r *gin.Engine,
-	cfg *config.Config,
-	authHandler *handler.AuthHandler,
-	userHandler *handler.UserHandler,
-	jwtService *util.JWTService,
-	dbConns *database.DatabaseConnections,
-) {
+func SetupRoutes(r *gin.Engine, app *App) {
 	// Middleware
-	r.Use(middleware.RequestLogger(cfg))
-	r.Use(middleware.CORSMiddleware(cfg.App.CORS))
+	r.Use(middleware.RequestLogger(app.Config))
+	r.Use(middleware.CORSMiddleware(app.Config.App.CORS))
 	// Note: TenantMiddleware is now optional and applied per route group as needed
 
 	// API group
@@ -39,47 +28,55 @@ func SetupRoutes(
 	// Auth routes (public - no tenant context required)
 	auth := api.Group("/auth")
 	{
-		auth.POST("/login", authHandler.Login)
-		auth.POST("/register", authHandler.Register)
+		auth.POST("/login", app.AuthHandler.Login)
+		auth.POST("/register", app.AuthHandler.Register)
 	}
 
 	// Protected routes
 	protected := api.Group("")
-	protected.Use(middleware.JWTMiddleware(jwtService))
+	protected.Use(middleware.JWTMiddleware(app.JWTService))
 
 	// Auth protected routes (for authenticated users - no tenant context required)
 	authProtected := protected.Group("/auth")
 	{
-		authProtected.POST("/change-password", authHandler.ChangePassword)
-		authProtected.GET("/tenants", authHandler.GetUserTenants)      // Get user's available tenants
-		authProtected.POST("/select-tenant", authHandler.SelectTenant) // Select a tenant and get new token
+		authProtected.POST("/change-password", app.AuthHandler.ChangePassword)
+		authProtected.GET("/tenants", app.AuthHandler.GetUserTenants)      // Get user's available tenants
+		authProtected.POST("/select-tenant", app.AuthHandler.SelectTenant) // Select a tenant and get new token
 	}
 
 	// User routes (Admin and Developer only - requires tenant context)
 	users := protected.Group("/users")
-	users.Use(middleware.TenantMiddleware(dbConns))
+	users.Use(middleware.TenantMiddleware(app.DBConns))
 	users.Use(middleware.RequireTenant())
 	users.Use(middleware.RoleMiddleware("Admin", "Developer"))
 	{
-		users.POST("", userHandler.Create)
-		users.GET("", userHandler.List)
-		users.GET("/:id", userHandler.GetByID)
-		users.PUT("/:id", userHandler.Update)
-		users.DELETE("/:id", userHandler.Delete)
+		users.POST("", app.UserHandler.Create)
+		users.GET("", app.UserHandler.List)
+		users.GET("/:id", app.UserHandler.GetByID)
+		users.PUT("/:id", app.UserHandler.Update)
+		users.DELETE("/:id", app.UserHandler.Delete)
+		users.DELETE("", app.UserHandler.BulkDelete)
 	}
 
 	// Student routes (can be accessed by Teachers, Admin, Developer)
 	students := protected.Group("/students")
-	students.Use(middleware.TenantMiddleware(dbConns))
+	students.Use(middleware.TenantMiddleware(app.DBConns))
 	students.Use(middleware.RequireTenant())
 	students.Use(middleware.RoleMiddleware("Teacher", "Admin", "Developer"))
 	{
-		// TODO: Add student handlers
+		students.POST("", app.StudentHandler.Create)
+		students.GET("", app.StudentHandler.List)
+		students.GET("/:id", app.StudentHandler.GetByID)
+		students.PUT("/:id", app.StudentHandler.Update)
+		students.DELETE("/:id", app.StudentHandler.Delete)
+		students.DELETE("", app.StudentHandler.BulkDelete)
+		students.GET("/class/:class_id", app.StudentHandler.GetByClass)
+		students.GET("/parent/:parent_id", app.StudentHandler.GetByParent)
 	}
 
 	// Teacher routes (can be accessed by Admin, Developer)
 	teachers := protected.Group("/teachers")
-	teachers.Use(middleware.TenantMiddleware(dbConns))
+	teachers.Use(middleware.TenantMiddleware(app.DBConns))
 	teachers.Use(middleware.RequireTenant())
 	teachers.Use(middleware.RoleMiddleware("Admin", "Developer"))
 	{
@@ -88,7 +85,7 @@ func SetupRoutes(
 
 	// Class routes (can be accessed by Teachers, Admin, Developer)
 	classes := protected.Group("/classes")
-	classes.Use(middleware.TenantMiddleware(dbConns))
+	classes.Use(middleware.TenantMiddleware(app.DBConns))
 	classes.Use(middleware.RequireTenant())
 	classes.Use(middleware.RoleMiddleware("Teacher", "Admin", "Developer"))
 	{
@@ -97,7 +94,7 @@ func SetupRoutes(
 
 	// Subject routes (can be accessed by Teachers, Admin, Developer)
 	subjects := protected.Group("/subjects")
-	subjects.Use(middleware.TenantMiddleware(dbConns))
+	subjects.Use(middleware.TenantMiddleware(app.DBConns))
 	subjects.Use(middleware.RequireTenant())
 	subjects.Use(middleware.RoleMiddleware("Teacher", "Admin", "Developer"))
 	{
@@ -106,7 +103,7 @@ func SetupRoutes(
 
 	// Attendance routes (can be accessed by Teachers, Admin, Developer)
 	attendance := protected.Group("/attendance")
-	attendance.Use(middleware.TenantMiddleware(dbConns))
+	attendance.Use(middleware.TenantMiddleware(app.DBConns))
 	attendance.Use(middleware.RequireTenant())
 	attendance.Use(middleware.RoleMiddleware("Teacher", "Admin", "Developer"))
 	{
@@ -115,7 +112,7 @@ func SetupRoutes(
 
 	// Grade routes (can be accessed by Teachers, Admin, Developer)
 	grades := protected.Group("/grades")
-	grades.Use(middleware.TenantMiddleware(dbConns))
+	grades.Use(middleware.TenantMiddleware(app.DBConns))
 	grades.Use(middleware.RequireTenant())
 	grades.Use(middleware.RoleMiddleware("Teacher", "Admin", "Developer"))
 	{
@@ -124,7 +121,7 @@ func SetupRoutes(
 
 	// Fee routes (can be accessed by Staff, Admin, Developer)
 	fees := protected.Group("/fees")
-	fees.Use(middleware.TenantMiddleware(dbConns))
+	fees.Use(middleware.TenantMiddleware(app.DBConns))
 	fees.Use(middleware.RequireTenant())
 	fees.Use(middleware.RoleMiddleware("Staff", "Admin", "Developer"))
 	{

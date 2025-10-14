@@ -19,6 +19,7 @@ type TenantUserRepository interface {
 	GetByUser(userID uuid.UUID, offset, limit int) ([]model.TenantUser, int64, error)
 	Update(tenantUser *model.TenantUser) error
 	Delete(id uuid.UUID) error
+	BulkDelete(ids []uuid.UUID) error
 	ActivateUser(tenantID, userID uuid.UUID) error
 	DeactivateUser(tenantID, userID uuid.UUID) error
 }
@@ -146,6 +147,21 @@ func (r *tenantUserRepository) Update(tenantUser *model.TenantUser) error {
 
 func (r *tenantUserRepository) Delete(id uuid.UUID) error {
 	return r.db.Write.Delete(&model.TenantUser{}, id).Error
+}
+
+func (r *tenantUserRepository) BulkDelete(ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	err := r.db.Write.Where("id IN (?)", ids).Delete(&model.TenantUser{}).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Interface("ids", ids).
+			Msg("Failed to bulk delete tenant users from database")
+	}
+	return err
 }
 
 func (r *tenantUserRepository) ActivateUser(tenantID, userID uuid.UUID) error {

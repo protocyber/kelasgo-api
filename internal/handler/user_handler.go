@@ -269,6 +269,80 @@ func (h *UserHandler) Delete(c *gin.Context) {
 	})
 }
 
+// BulkDelete handles bulk user deletion
+func (h *UserHandler) BulkDelete(c *gin.Context) {
+	var req dto.BulkDeleteUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Error().
+			Err(err).
+			Str("remote_ip", c.ClientIP()).
+			Str("user_agent", c.Request.UserAgent()).
+			Msg("Failed to bind bulk delete user request JSON")
+		c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Invalid request body",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if err := h.validator.Struct(req); err != nil {
+		log.Warn().
+			Err(err).
+			Interface("user_ids", req.IDs).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Bulk delete user request validation failed")
+		c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Validation failed",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	// Get tenant ID from middleware context
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == uuid.Nil {
+		log.Error().
+			Interface("user_ids", req.IDs).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Bulk delete users attempt without valid tenant ID")
+		c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Tenant ID required",
+			Error:   "User bulk deletion requires a valid tenant context",
+		})
+		return
+	}
+
+	err := h.userService.BulkDelete(tenantID, req.IDs)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Interface("user_ids", req.IDs).
+			Str("tenant_id", tenantID.String()).
+			Str("remote_ip", c.ClientIP()).
+			Msg("Bulk user deletion failed in handler")
+		c.JSON(http.StatusBadRequest, dto.Response{
+			Success: false,
+			Message: "Failed to bulk delete users",
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	log.Info().
+		Interface("user_ids", req.IDs).
+		Str("tenant_id", tenantID.String()).
+		Str("remote_ip", c.ClientIP()).
+		Msg("Users bulk deleted successfully via handler")
+
+	c.JSON(http.StatusOK, dto.Response{
+		Success: true,
+		Message: "Users bulk deleted successfully",
+	})
+}
+
 // List handles user listing with pagination
 func (h *UserHandler) List(c *gin.Context) {
 	var params dto.UserQueryParams

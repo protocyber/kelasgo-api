@@ -40,7 +40,10 @@ func InitializeApp() (*App, error) {
 	authHandler := handler.NewAuthHandler(authService, validate)
 	userService := service.NewUserService(userRepository, roleRepository, tenantUserRepository, tenantUserRoleRepository)
 	userHandler := handler.NewUserHandler(userService, validate)
-	app := NewApp(authHandler, userHandler, databaseConnections, jwtService, configConfig)
+	studentRepository := repository.NewStudentRepository(databaseConnections)
+	studentService := service.NewStudentService(studentRepository, tenantUserRepository)
+	studentHandler := handler.NewStudentHandler(studentService, validate)
+	app := NewApp(authHandler, userHandler, studentHandler, databaseConnections, jwtService, configConfig)
 	return app, nil
 }
 
@@ -48,17 +51,18 @@ func InitializeApp() (*App, error) {
 
 // App represents the main application structure
 type App struct {
-	AuthHandler *handler.AuthHandler
-	UserHandler *handler.UserHandler
-	DBConns     *database.DatabaseConnections
-	JWTService  *util.JWTService
-	Config      *config.Config
+	AuthHandler    *handler.AuthHandler
+	UserHandler    *handler.UserHandler
+	StudentHandler *handler.StudentHandler
+	DBConns        *database.DatabaseConnections
+	JWTService     *util.JWTService
+	Config         *config.Config
 }
 
 // ProviderSet contains all the wire providers
 var ProviderSet = wire.NewSet(config.Load, database.NewConnections, ProvideValidator,
 
-	ProvideJWTConfig, util.NewJWTService, repository.NewUserRepository, repository.NewRoleRepository, repository.NewTenantUserRepository, repository.NewTenantUserRoleRepository, service.NewAuthService, service.NewUserService, handler.NewAuthHandler, handler.NewUserHandler, NewApp,
+	ProvideJWTConfig, util.NewJWTService, repository.NewUserRepository, repository.NewRoleRepository, repository.NewTenantUserRepository, repository.NewTenantUserRoleRepository, repository.NewStudentRepository, service.NewAuthService, service.NewUserService, service.NewStudentService, handler.NewAuthHandler, handler.NewUserHandler, handler.NewStudentHandler, NewApp,
 )
 
 // ProvideJWTConfig extracts JWT config from main config
@@ -75,15 +79,17 @@ func ProvideValidator() *validator.Validate {
 func NewApp(
 	authHandler *handler.AuthHandler,
 	userHandler *handler.UserHandler,
+	studentHandler *handler.StudentHandler,
 	dbConns *database.DatabaseConnections,
 	jwtService *util.JWTService,
 	cfg *config.Config,
 ) *App {
 	return &App{
-		AuthHandler: authHandler,
-		UserHandler: userHandler,
-		DBConns:     dbConns,
-		JWTService:  jwtService,
-		Config:      cfg,
+		AuthHandler:    authHandler,
+		UserHandler:    userHandler,
+		StudentHandler: studentHandler,
+		DBConns:        dbConns,
+		JWTService:     jwtService,
+		Config:         cfg,
 	}
 }

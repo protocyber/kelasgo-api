@@ -18,6 +18,7 @@ type StudentRepository interface {
 	GetByTenantUserID(tenantUserID uuid.UUID) (*model.Student, error)
 	Update(student *model.Student) error
 	Delete(id uuid.UUID) error
+	BulkDelete(ids []uuid.UUID) error
 	List(tenantID uuid.UUID, offset, limit int, search string) ([]model.Student, int64, error)
 	GetByClass(tenantID, classID uuid.UUID, offset, limit int) ([]model.Student, int64, error)
 	GetByParent(tenantID, parentID uuid.UUID, offset, limit int) ([]model.Student, int64, error)
@@ -155,6 +156,21 @@ func (r *studentRepository) Delete(id uuid.UUID) error {
 			Err(err).
 			Str("student_id", id.String()).
 			Msg("Failed to delete student from database")
+	}
+	return err
+}
+
+func (r *studentRepository) BulkDelete(ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	err := r.db.Write.Where("id IN (?)", ids).Delete(&model.Student{}).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Interface("ids", ids).
+			Msg("Failed to bulk delete students from database")
 	}
 	return err
 }

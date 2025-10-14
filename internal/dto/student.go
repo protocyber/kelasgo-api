@@ -27,3 +27,7 @@ type StudentQueryParams struct {
 	ClassID  *uuid.UUID `query:"class_id" validate:"omitempty,uuid"`
 	ParentID *uuid.UUID `query:"parent_id" validate:"omitempty,uuid"`
 }
+
+type BulkDeleteStudentRequest struct {
+	IDs []uuid.UUID `json:"ids" validate:"required,min=1,dive,required"`
+}

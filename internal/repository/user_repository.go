@@ -22,6 +22,7 @@ type UserRepository interface {
 	GetUserTenants(userID uuid.UUID) ([]model.TenantUser, error) // Get all tenants for a user
 	Update(user *model.User) error
 	Delete(id uuid.UUID) error
+	BulkDelete(ids []uuid.UUID) error
 	List(offset, limit int, search string) ([]model.User, int64, error)
 	GetUsersByTenant(tenantID uuid.UUID, offset, limit int, search string) ([]model.User, int64, error)
 	GetUsersByRole(roleID uuid.UUID, offset, limit int) ([]model.User, int64, error)
@@ -146,6 +147,21 @@ func (r *userRepository) Delete(id uuid.UUID) error {
 			Err(err).
 			Str("user_id", id.String()).
 			Msg("Failed to delete user from database")
+	}
+	return err
+}
+
+func (r *userRepository) BulkDelete(ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	err := r.db.Write.Where("id IN (?)", ids).Delete(&model.User{}).Error
+	if err != nil {
+		log.Error().
+			Err(err).
+			Interface("ids", ids).
+			Msg("Failed to bulk delete users from database")
 	}
 	return err
 }

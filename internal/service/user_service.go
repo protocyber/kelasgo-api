@@ -18,6 +18,7 @@ type UserService interface {
 	GetByID(id uuid.UUID) (*model.User, error)
 	Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.User, error)
 	Delete(id uuid.UUID) error
+	BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error
 	List(tenantID uuid.UUID, params dto.UserQueryParams) ([]model.User, *dto.PaginationMeta, error)
 }
 
@@ -350,6 +351,71 @@ func (s *userService) Delete(id uuid.UUID) error {
 		Str("user_id", id.String()).
 		Str("username", user.Username).
 		Msg("User deleted successfully")
+
+	return nil
+}
+
+func (s *userService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return errors.New("no user IDs provided for bulk delete")
+	}
+
+	// Get users that belong to the tenant to validate they exist and log properly
+	users, _, err := s.userRepo.GetUsersByTenant(tenantID, 0, len(ids)*2, "")
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("tenant_id", tenantID.String()).
+			Interface("user_ids", ids).
+			Msg("Failed to validate users for bulk delete")
+		return errors.New("failed to validate users for bulk delete")
+	}
+
+	// Create a set of valid user IDs that belong to the tenant
+	validUserMap := make(map[uuid.UUID]bool)
+	for _, user := range users {
+		validUserMap[user.ID] = true
+	}
+
+	// Filter IDs to only include users that belong to the tenant
+	var validIDs []uuid.UUID
+	var invalidIDs []uuid.UUID
+	for _, id := range ids {
+		if validUserMap[id] {
+			validIDs = append(validIDs, id)
+		} else {
+			invalidIDs = append(invalidIDs, id)
+		}
+	}
+
+	if len(invalidIDs) > 0 {
+		log.Warn().
+			Str("tenant_id", tenantID.String()).
+			Interface("invalid_ids", invalidIDs).
+			Msg("Some user IDs do not belong to the tenant or do not exist")
+	}
+
+	if len(validIDs) == 0 {
+		return errors.New("no valid user IDs found for bulk delete in this tenant")
+	}
+
+	// Perform bulk delete
+	err = s.userRepo.BulkDelete(validIDs)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("tenant_id", tenantID.String()).
+			Interface("user_ids", validIDs).
+			Msg("Failed to bulk delete users from database")
+		return errors.New("failed to bulk delete users")
+	}
+
+	log.Info().
+		Str("tenant_id", tenantID.String()).
+		Interface("user_ids", validIDs).
+		Int("deleted_count", len(validIDs)).
+		Interface("invalid_ids", invalidIDs).
+		Msg("Users bulk deleted successfully")
 
 	return nil
 }

@@ -16,11 +16,12 @@ import (
 
 // App represents the main application structure
 type App struct {
-	AuthHandler *handler.AuthHandler
-	UserHandler *handler.UserHandler
-	DBConns     *database.DatabaseConnections
-	JWTService  *util.JWTService
-	Config      *config.Config
+	AuthHandler    *handler.AuthHandler
+	UserHandler    *handler.UserHandler
+	StudentHandler *handler.StudentHandler
+	DBConns        *database.DatabaseConnections
+	JWTService     *util.JWTService
+	Config         *config.Config
 }
 
 // ProviderSet contains all the wire providers
@@ -43,14 +44,17 @@ var ProviderSet = wire.NewSet(
 	repository.NewRoleRepository,
 	repository.NewTenantUserRepository,
 	repository.NewTenantUserRoleRepository,
+	repository.NewStudentRepository,
 
 	// Services
 	service.NewAuthService,
 	service.NewUserService,
+	service.NewStudentService,
 
 	// Handlers
 	handler.NewAuthHandler,
 	handler.NewUserHandler,
+	handler.NewStudentHandler,
 
 	// App
 	NewApp,
@@ -70,16 +74,18 @@ func ProvideValidator() *validator.Validate {
 func NewApp(
 	authHandler *handler.AuthHandler,
 	userHandler *handler.UserHandler,
+	studentHandler *handler.StudentHandler,
 	dbConns *database.DatabaseConnections,
 	jwtService *util.JWTService,
 	cfg *config.Config,
 ) *App {
 	return &App{
-		AuthHandler: authHandler,
-		UserHandler: userHandler,
-		DBConns:     dbConns,
-		JWTService:  jwtService,
-		Config:      cfg,
+		AuthHandler:    authHandler,
+		UserHandler:    userHandler,
+		StudentHandler: studentHandler,
+		DBConns:        dbConns,
+		JWTService:     jwtService,
+		Config:         cfg,
 	}
 }
 

@@ -40,3 +40,7 @@ type UserQueryParams struct {
 	RoleID   *uuid.UUID `query:"role_id"`
 	IsActive *bool      `query:"is_active"`
 }
+
+type BulkDeleteUserRequest struct {
+	IDs []uuid.UUID `json:"ids" validate:"required,min=1,dive,required"`
+}

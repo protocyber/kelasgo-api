@@ -40,7 +40,7 @@ func main() {
 	r := gin.New()
 
 	// Setup routes
-	SetupRoutes(r, app.Config, app.AuthHandler, app.UserHandler, app.JWTService, app.DBConns)
+	SetupRoutes(r, app)
 
 	// Get server address
 	serverAddr := app.Config.GetServerAddress()
