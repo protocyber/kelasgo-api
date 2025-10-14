@@ -655,6 +655,8 @@ DROP TABLE IF EXISTS feature_flags;
 -- ======================================================
 -- DROP ENUMS
 -- ======================================================
+DROP TYPE IF EXISTS day_of_week_enum;
+DROP TYPE IF EXISTS gender_enum;
 DROP TYPE IF EXISTS attendance_status_enum;
 DROP TYPE IF EXISTS invoice_status_enum;
 DROP TYPE IF EXISTS subscription_plan_status_enum;
