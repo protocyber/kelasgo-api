@@ -12,7 +12,7 @@ BEGIN
     FOR tbl IN
         SELECT tablename FROM pg_tables
         WHERE schemaname = 'public'
-        AND tablename IN ('users','teachers','students','subjects','classes','class_subjects','academic_years','attendance', 'grades','enrollments','schedules','departments','parents','notifications','student_fees','fee_types','tenant_features')
+        AND tablename IN ('tenant_users','teachers','students','subjects','classes','class_subjects','academic_years','attendance', 'grades','enrollments','schedules','departments','parents','notifications','student_fees','fee_types','tenant_features','tenant_user_roles')
     LOOP
         EXECUTE format('DROP TRIGGER IF EXISTS trg_audit_%1$I ON %1$I;', tbl);
     END LOOP;

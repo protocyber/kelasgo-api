@@ -21,11 +21,11 @@ type AuthService interface {
 
 // authService implements AuthService
 type authService struct {
-	userRepo       repository.UserRepository
-	roleRepo       repository.RoleRepository
-	tenantUserRepo repository.TenantUserRepository
-	userRoleRepo   repository.UserRoleRepository
-	jwtService     *util.JWTService
+	userRepo           repository.UserRepository
+	roleRepo           repository.RoleRepository
+	tenantUserRepo     repository.TenantUserRepository
+	tenantUserRoleRepo repository.TenantUserRoleRepository
+	jwtService         *util.JWTService
 }
 
 // NewAuthService creates a new auth service
@@ -33,15 +33,15 @@ func NewAuthService(
 	userRepo repository.UserRepository,
 	roleRepo repository.RoleRepository,
 	tenantUserRepo repository.TenantUserRepository,
-	userRoleRepo repository.UserRoleRepository,
+	tenantUserRoleRepo repository.TenantUserRoleRepository,
 	jwtService *util.JWTService,
 ) AuthService {
 	return &authService{
-		userRepo:       userRepo,
-		roleRepo:       roleRepo,
-		tenantUserRepo: tenantUserRepo,
-		userRoleRepo:   userRoleRepo,
-		jwtService:     jwtService,
+		userRepo:           userRepo,
+		roleRepo:           roleRepo,
+		tenantUserRepo:     tenantUserRepo,
+		tenantUserRoleRepo: tenantUserRoleRepo,
+		jwtService:         jwtService,
 	}
 }
 
@@ -92,10 +92,22 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 		return nil, errors.New("invalid username or password")
 	}
 
-	// Get role name from UserRoles
+	// Get tenant user first
+	tenantUser, err := s.tenantUserRepo.GetByTenantAndUser(tenantID, user.ID)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("user_id", user.ID.String()).
+			Str("tenant_id", tenantID.String()).
+			Msg("Tenant user not found during login")
+		return nil, errors.New("user not authorized for this tenant")
+	}
+
+	// Get role name from TenantUserRoles
 	roleName := ""
-	if len(user.UserRoles) > 0 && user.UserRoles[0].Role != nil {
-		roleName = user.UserRoles[0].Role.Name
+	tenantUserRoles, err := s.tenantUserRoleRepo.GetRolesByTenantUser(tenantUser.ID)
+	if err == nil && len(tenantUserRoles) > 0 && tenantUserRoles[0].Role != nil {
+		roleName = tenantUserRoles[0].Role.Name
 	}
 
 	// Generate JWT token
@@ -216,25 +228,25 @@ func (s *authService) Register(tenantID uuid.UUID, req dto.CreateUserRequest) (*
 		return nil, errors.New("failed to create tenant-user relationship")
 	}
 
-	// Create user-role relationship if role is provided
+	// Create tenant user-role relationship if role is provided
 	if req.RoleID != nil {
-		userRole := &model.UserRole{
-			UserID: user.ID,
-			RoleID: *req.RoleID,
+		tenantUserRole := &model.TenantUserRole{
+			TenantUserID: tenantUser.ID,
+			RoleID:       *req.RoleID,
 		}
 
-		err = s.userRoleRepo.Create(userRole)
+		err = s.tenantUserRoleRepo.Create(tenantUserRole)
 		if err != nil {
 			log.Error().
 				Err(err).
-				Str("user_id", user.ID.String()).
+				Str("tenant_user_id", tenantUser.ID.String()).
 				Str("role_id", req.RoleID.String()).
 				Str("tenant_id", tenantID.String()).
-				Msg("Failed to create user-role relationship during registration")
-			// If user-role creation fails, cleanup user and tenant-user
+				Msg("Failed to create tenant user-role relationship during registration")
+			// If tenant user-role creation fails, cleanup user and tenant-user
 			s.tenantUserRepo.Delete(tenantUser.ID)
 			s.userRepo.Delete(user.ID)
-			return nil, errors.New("failed to create user-role relationship")
+			return nil, errors.New("failed to create tenant user-role relationship")
 		}
 	}
 

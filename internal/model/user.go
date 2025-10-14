@@ -18,10 +18,10 @@ type User struct {
 	Phone           *string    `gorm:"size:20" json:"phone,omitempty"`
 	Address         *string    `gorm:"type:text" json:"address,omitempty"`
 	IsActive        bool       `gorm:"default:true" json:"is_active"`
+	IsDeveloper     bool       `gorm:"default:true" json:"is_developer"`
 
 	// Relationships
 	TenantUsers   []TenantUser   `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"tenant_users,omitempty"`
-	UserRoles     []UserRole     `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user_roles,omitempty"`
 	Notifications []Notification `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"notifications,omitempty"`
 	AuditLogs     []AuditLog     `gorm:"foreignKey:UserID;constraint:OnDelete:SET NULL" json:"audit_logs,omitempty"`
 }

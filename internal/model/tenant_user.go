@@ -15,9 +15,11 @@ type TenantUser struct {
 	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 
 	// Relationships
-	User    *User    `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
-	Teacher *Teacher `gorm:"foreignKey:TenantUserID;constraint:OnDelete:CASCADE" json:"teacher,omitempty"`
-	Student *Student `gorm:"foreignKey:TenantUserID;constraint:OnDelete:CASCADE" json:"student,omitempty"`
+	Tenant          *Tenant          `gorm:"foreignKey:TenantID;constraint:OnDelete:CASCADE" json:"tenant,omitempty"`
+	User            *User            `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user,omitempty"`
+	Teacher         *Teacher         `gorm:"foreignKey:TenantUserID;constraint:OnDelete:CASCADE" json:"teacher,omitempty"`
+	Student         *Student         `gorm:"foreignKey:TenantUserID;constraint:OnDelete:CASCADE" json:"student,omitempty"`
+	TenantUserRoles []TenantUserRole `gorm:"foreignKey:TenantUserID;constraint:OnDelete:CASCADE" json:"tenant_user_roles,omitempty"`
 }
 
 // TableName returns the table name for TenantUser

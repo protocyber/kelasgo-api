@@ -32,13 +32,13 @@ func InitializeApp() (*App, error) {
 	userRepository := repository.NewUserRepository(databaseConnections)
 	roleRepository := repository.NewRoleRepository(databaseConnections)
 	tenantUserRepository := repository.NewTenantUserRepository(databaseConnections)
-	userRoleRepository := repository.NewUserRoleRepository(databaseConnections)
+	tenantUserRoleRepository := repository.NewTenantUserRoleRepository(databaseConnections)
 	v := ProvideJWTConfig(configConfig)
 	jwtService := util.NewJWTService(v)
-	authService := service.NewAuthService(userRepository, roleRepository, tenantUserRepository, userRoleRepository, jwtService)
+	authService := service.NewAuthService(userRepository, roleRepository, tenantUserRepository, tenantUserRoleRepository, jwtService)
 	validate := ProvideValidator()
 	authHandler := handler.NewAuthHandler(authService, validate)
-	userService := service.NewUserService(userRepository, roleRepository, tenantUserRepository, userRoleRepository)
+	userService := service.NewUserService(userRepository, roleRepository, tenantUserRepository, tenantUserRoleRepository)
 	userHandler := handler.NewUserHandler(userService, validate)
 	app := NewApp(authHandler, userHandler, databaseConnections, jwtService, configConfig)
 	return app, nil
@@ -58,7 +58,7 @@ type App struct {
 // ProviderSet contains all the wire providers
 var ProviderSet = wire.NewSet(config.Load, database.NewConnections, ProvideValidator,
 
-	ProvideJWTConfig, util.NewJWTService, repository.NewUserRepository, repository.NewRoleRepository, repository.NewTenantUserRepository, repository.NewUserRoleRepository, service.NewAuthService, service.NewUserService, handler.NewAuthHandler, handler.NewUserHandler, NewApp,
+	ProvideJWTConfig, util.NewJWTService, repository.NewUserRepository, repository.NewRoleRepository, repository.NewTenantUserRepository, repository.NewTenantUserRoleRepository, service.NewAuthService, service.NewUserService, handler.NewAuthHandler, handler.NewUserHandler, NewApp,
 )
 
 // ProvideJWTConfig extracts JWT config from main config

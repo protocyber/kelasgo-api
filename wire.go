@@ -42,7 +42,7 @@ var ProviderSet = wire.NewSet(
 	repository.NewUserRepository,
 	repository.NewRoleRepository,
 	repository.NewTenantUserRepository,
-	repository.NewUserRoleRepository,
+	repository.NewTenantUserRoleRepository,
 
 	// Services
 	service.NewAuthService,

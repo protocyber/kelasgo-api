@@ -23,10 +23,10 @@ type UserService interface {
 
 // userService implements UserService
 type userService struct {
-	userRepo       repository.UserRepository
-	roleRepo       repository.RoleRepository
-	tenantUserRepo repository.TenantUserRepository
-	userRoleRepo   repository.UserRoleRepository
+	userRepo           repository.UserRepository
+	roleRepo           repository.RoleRepository
+	tenantUserRepo     repository.TenantUserRepository
+	tenantUserRoleRepo repository.TenantUserRoleRepository
 }
 
 // NewUserService creates a new user service
@@ -34,13 +34,13 @@ func NewUserService(
 	userRepo repository.UserRepository,
 	roleRepo repository.RoleRepository,
 	tenantUserRepo repository.TenantUserRepository,
-	userRoleRepo repository.UserRoleRepository,
+	tenantUserRoleRepo repository.TenantUserRoleRepository,
 ) UserService {
 	return &userService{
-		userRepo:       userRepo,
-		roleRepo:       roleRepo,
-		tenantUserRepo: tenantUserRepo,
-		userRoleRepo:   userRoleRepo,
+		userRepo:           userRepo,
+		roleRepo:           roleRepo,
+		tenantUserRepo:     tenantUserRepo,
+		tenantUserRoleRepo: tenantUserRoleRepo,
 	}
 }
 
@@ -139,24 +139,24 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 		return nil, errors.New("failed to create tenant-user relationship")
 	}
 
-	// Create user-role relationship if role is provided
+	// Create tenant user-role relationship if role is provided
 	if req.RoleID != nil {
-		userRole := &model.UserRole{
-			UserID: user.ID,
-			RoleID: *req.RoleID,
+		tenantUserRole := &model.TenantUserRole{
+			TenantUserID: tenantUser.ID,
+			RoleID:       *req.RoleID,
 		}
 
-		err = s.userRoleRepo.Create(userRole)
+		err = s.tenantUserRoleRepo.Create(tenantUserRole)
 		if err != nil {
 			log.Error().
 				Err(err).
-				Str("user_id", user.ID.String()).
+				Str("tenant_user_id", tenantUser.ID.String()).
 				Str("role_id", req.RoleID.String()).
-				Msg("Failed to create user-role relationship")
-			// If user-role creation fails, cleanup user and tenant-user
+				Msg("Failed to create tenant user-role relationship")
+			// If tenant user-role creation fails, cleanup user and tenant-user
 			s.tenantUserRepo.Delete(tenantUser.ID)
 			s.userRepo.Delete(user.ID)
-			return nil, errors.New("failed to create user-role relationship")
+			return nil, errors.New("failed to create tenant user-role relationship")
 		}
 	}
 
@@ -228,29 +228,40 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 			return nil, errors.New("invalid role ID")
 		}
 
-		// Delete existing user roles and create new one
-		err = s.userRoleRepo.DeleteAllUserRoles(user.ID)
+		// Get tenant user
+		tenantUser, err := s.tenantUserRepo.GetByTenantAndUser(tenantID, user.ID)
 		if err != nil {
 			log.Error().
 				Err(err).
 				Str("user_id", id.String()).
-				Msg("Failed to delete existing user roles during update")
-			return nil, errors.New("failed to update user role")
+				Str("tenant_id", tenantID.String()).
+				Msg("Tenant user not found during role update")
+			return nil, errors.New("tenant user not found")
 		}
 
-		userRole := &model.UserRole{
-			UserID: user.ID,
-			RoleID: *req.RoleID,
-		}
-
-		err = s.userRoleRepo.Create(userRole)
+		// Delete existing tenant user roles and create new one
+		err = s.tenantUserRoleRepo.DeleteAllTenantUserRoles(tenantUser.ID)
 		if err != nil {
 			log.Error().
 				Err(err).
-				Str("user_id", id.String()).
+				Str("tenant_user_id", tenantUser.ID.String()).
+				Msg("Failed to delete existing tenant user roles during update")
+			return nil, errors.New("failed to update tenant user role")
+		}
+
+		tenantUserRole := &model.TenantUserRole{
+			TenantUserID: tenantUser.ID,
+			RoleID:       *req.RoleID,
+		}
+
+		err = s.tenantUserRoleRepo.Create(tenantUserRole)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("tenant_user_id", tenantUser.ID.String()).
 				Str("role_id", req.RoleID.String()).
-				Msg("Failed to create new user role during update")
-			return nil, errors.New("failed to create new user role")
+				Msg("Failed to create new tenant user role during update")
+			return nil, errors.New("failed to create new tenant user role")
 		}
 	}
 

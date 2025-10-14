@@ -98,7 +98,7 @@ DROP INDEX IF EXISTS idx_classes_tenant_year;
 -- Drop user management and authentication indexes
 DROP INDEX IF EXISTS idx_students_tenant_user_active;
 DROP INDEX IF EXISTS idx_teachers_tenant_user_active;
-DROP INDEX IF EXISTS idx_user_roles_role_id;
+DROP INDEX IF EXISTS idx_tenant_user_roles_role_id;
 DROP INDEX IF EXISTS idx_users_email_username;
 
 -- Drop subscription and billing performance indexes
@@ -503,12 +503,15 @@ DROP CONSTRAINT IF EXISTS fk_subscriptions_plan_id;
 ALTER TABLE tenants
 DROP CONSTRAINT IF EXISTS fk_tenants_plan_id;
 
--- Drop user roles constraints
-ALTER TABLE user_roles
-DROP CONSTRAINT IF EXISTS fk_user_roles_user_id;
+ALTER TABLE tenants
+DROP CONSTRAINT IF EXISTS fk_tenants_created_by;
 
-ALTER TABLE user_roles
-DROP CONSTRAINT IF EXISTS fk_user_roles_role_id;
+-- Drop tenant user roles constraints
+ALTER TABLE tenant_user_roles
+DROP CONSTRAINT IF EXISTS fk_tenant_user_roles_tenant_user_id;
+
+ALTER TABLE tenant_user_roles
+DROP CONSTRAINT IF EXISTS fk_tenant_user_roles_role_id;
 
 -- ======================================================
 -- DROP FOREIGN KEY CONSTRAINTS FOR AUDIT COLUMNS
@@ -643,7 +646,7 @@ DROP TABLE IF EXISTS academic_years;
 DROP TABLE IF EXISTS parents;
 DROP TABLE IF EXISTS teachers;
 DROP TABLE IF EXISTS departments;
-DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS tenant_user_roles;
 DROP TABLE IF EXISTS tenant_users;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS roles;

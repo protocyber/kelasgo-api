@@ -48,7 +48,8 @@ CREATE TABLE
     logo_url VARCHAR(255),
     plan_id UUID,
     subscription_status subscription_status_enum DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID
   );
 
 -- ======================================================
@@ -152,7 +153,8 @@ CREATE TABLE
     date_of_birth DATE,
     phone VARCHAR(20),
     address TEXT,
-    is_active BOOLEAN DEFAULT TRUE
+    is_active BOOLEAN DEFAULT TRUE,
+    is_developer BOOLEAN DEFAULT FALSE
   );
 
 -- ======================================================
@@ -169,13 +171,13 @@ CREATE TABLE
   );
 
 -- =======================
--- USER ROLES
+-- TENANT USER ROLES
 -- =======================
 CREATE TABLE
-  user_roles (
-    user_id UUID,
+  tenant_user_roles (
+    tenant_user_id UUID,
     role_id UUID,
-    PRIMARY KEY (user_id, role_id)
+    PRIMARY KEY (tenant_user_id, role_id)
   );
 
 -- ======================================================
@@ -407,7 +409,8 @@ CREATE TABLE
 -- Moved outside table definitions to avoid circular dependencies
 
 -- Subscription and billing foreign key constraints
-ALTER TABLE tenants ADD CONSTRAINT fk_tenants_plan_id FOREIGN KEY (plan_id) REFERENCES subscription_plans (id) ON DELETE SET NULL;
+ALTER TABLE tenants ADD CONSTRAINT fk_tenants_plan_id FOREIGN KEY (plan_id) REFERENCES subscription_plans (id) ON DELETE SET NULL,
+ADD CONSTRAINT fk_tenants_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL;
 
 ALTER TABLE subscriptions ADD CONSTRAINT fk_subscriptions_tenant_id FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE,
 ADD CONSTRAINT fk_subscriptions_plan_id FOREIGN KEY (plan_id) REFERENCES subscription_plans (id) ON DELETE CASCADE;
@@ -422,8 +425,8 @@ ADD CONSTRAINT fk_tenant_features_feature_id FOREIGN KEY (feature_id) REFERENCES
 ALTER TABLE tenant_users ADD CONSTRAINT fk_tenant_users_tenant_id FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE,
 ADD CONSTRAINT fk_tenant_users_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;
 
-ALTER TABLE user_roles ADD CONSTRAINT fk_user_roles_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-ADD CONSTRAINT fk_user_roles_role_id FOREIGN KEY (role_id) REFERENCES roles (id) ON DELETE CASCADE;
+ALTER TABLE tenant_user_roles ADD CONSTRAINT fk_tenant_user_roles_tenant_user_id FOREIGN KEY (tenant_user_id) REFERENCES tenant_users (id) ON DELETE CASCADE,
+ADD CONSTRAINT fk_tenant_user_roles_role_id FOREIGN KEY (role_id) REFERENCES roles (id) ON DELETE CASCADE;
 
 ALTER TABLE departments ADD CONSTRAINT fk_departments_tenant_id FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE;
 
@@ -649,7 +652,7 @@ CREATE INDEX idx_invoices_tenant_unpaid ON invoices (tenant_id, status) WHERE st
 
 -- User management and authentication indexes
 CREATE INDEX idx_users_email_username ON users (email, username);
-CREATE INDEX idx_user_roles_role_id ON user_roles (role_id);
+CREATE INDEX idx_tenant_user_roles_role_id ON tenant_user_roles (role_id);
 CREATE INDEX idx_teachers_tenant_user_active ON teachers (tenant_user_id);
 CREATE INDEX idx_students_tenant_user_active ON students (tenant_user_id);
 
@@ -705,7 +708,6 @@ CREATE INDEX idx_departments_name_gin ON departments USING gin(to_tsvector('engl
 INSERT INTO
   roles (name, description)
 VALUES
-  ('Developer', 'Application Developer'),
   ('Admin', 'System Administrator'),
   ('Teacher', 'Teaching staff'),
   ('Student', 'Enrolled student'),
