@@ -55,7 +55,7 @@ func (r *userRepository) Create(user *model.User) error {
 
 func (r *userRepository) GetByID(id uuid.UUID) (*model.User, error) {
 	var user model.User
-	err := r.db.Read.Preload("TenantUsers").Preload("UserRoles.Role").First(&user, id).Error
+	err := r.db.Read.Preload("TenantUsers").First(&user, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Debug().
@@ -74,7 +74,7 @@ func (r *userRepository) GetByID(id uuid.UUID) (*model.User, error) {
 
 func (r *userRepository) GetByUsername(username string) (*model.User, error) {
 	var user model.User
-	err := r.db.Read.Preload("TenantUsers").Preload("UserRoles.Role").Where("username = ?", username).First(&user).Error
+	err := r.db.Read.Preload("TenantUsers").Where("username = ?", username).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("user not found")
@@ -86,7 +86,7 @@ func (r *userRepository) GetByUsername(username string) (*model.User, error) {
 
 func (r *userRepository) GetByEmail(email string) (*model.User, error) {
 	var user model.User
-	err := r.db.Read.Preload("TenantUsers").Preload("UserRoles.Role").Where("email = ?", email).First(&user).Error
+	err := r.db.Read.Preload("TenantUsers").Where("email = ?", email).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("user not found")
@@ -170,7 +170,7 @@ func (r *userRepository) List(offset, limit int, search string) ([]model.User, i
 	var users []model.User
 	var total int64
 
-	query := r.db.Read.Preload("TenantUsers").Preload("UserRoles.Role")
+	query := r.db.Read.Preload("TenantUsers")
 
 	if search != "" {
 		query = query.Where("full_name ILIKE ? OR username ILIKE ? OR email ILIKE ?",
@@ -207,7 +207,7 @@ func (r *userRepository) GetUsersByTenant(tenantID uuid.UUID, offset, limit int,
 	var users []model.User
 	var total int64
 
-	query := r.db.Read.Preload("TenantUsers").Preload("UserRoles.Role").
+	query := r.db.Read.Preload("TenantUsers").
 		Joins("JOIN tenant_users ON users.id = tenant_users.user_id").
 		Where("tenant_users.tenant_id = ?", tenantID)
 
@@ -230,9 +230,10 @@ func (r *userRepository) GetUsersByRole(roleID uuid.UUID, offset, limit int) ([]
 	var users []model.User
 	var total int64
 
-	query := r.db.Read.Preload("TenantUsers").Preload("UserRoles.Role").
-		Joins("JOIN user_roles ON users.id = user_roles.user_id").
-		Where("user_roles.role_id = ?", roleID)
+	query := r.db.Read.Preload("TenantUsers").
+		Joins("JOIN tenant_users ON users.id = tenant_users.user_id").
+		Joins("JOIN tenant_user_roles ON tenant_users.id = tenant_user_roles.tenant_user_id").
+		Where("tenant_user_roles.role_id = ? AND tenant_users.is_active = true", roleID)
 
 	// Get total count
 	if err := query.Model(&model.User{}).Count(&total).Error; err != nil {
@@ -255,7 +256,7 @@ func (r *userRepository) GetByUsernameAndTenant(username string, tenantID uuid.U
 	}
 
 	var user model.User
-	err := r.db.Read.Preload("TenantUsers").Preload("UserRoles.Role").
+	err := r.db.Read.Preload("TenantUsers").
 		Joins("JOIN tenant_users ON users.id = tenant_users.user_id").
 		Where("users.username = ? AND tenant_users.tenant_id = ? AND tenant_users.is_active = true", username, tenantID).
 		First(&user).Error
@@ -284,7 +285,7 @@ func (r *userRepository) GetByEmailAndTenant(email string, tenantID uuid.UUID) (
 	}
 
 	var user model.User
-	err := r.db.Read.Preload("TenantUsers").Preload("UserRoles.Role").
+	err := r.db.Read.Preload("TenantUsers").
 		Joins("JOIN tenant_users ON users.id = tenant_users.user_id").
 		Where("users.email = ? AND tenant_users.tenant_id = ? AND tenant_users.is_active = true", email, tenantID).
 		First(&user).Error
@@ -306,10 +307,10 @@ func (r *userRepository) GetByRole(tenantID uuid.UUID, roleID uuid.UUID, offset,
 	var users []model.User
 	var total int64
 
-	query := r.db.Read.Preload("TenantUsers").Preload("UserRoles.Role").
+	query := r.db.Read.Preload("TenantUsers").
 		Joins("JOIN tenant_users ON users.id = tenant_users.user_id").
-		Joins("JOIN user_roles ON users.id = user_roles.user_id").
-		Where("tenant_users.tenant_id = ? AND user_roles.role_id = ? AND tenant_users.is_active = true", tenantID, roleID)
+		Joins("JOIN tenant_user_roles ON tenant_users.id = tenant_user_roles.tenant_user_id").
+		Where("tenant_users.tenant_id = ? AND tenant_user_roles.role_id = ? AND tenant_users.is_active = true", tenantID, roleID)
 
 	// Get total count
 	if err := query.Model(&model.User{}).Count(&total).Error; err != nil {

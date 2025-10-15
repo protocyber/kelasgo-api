@@ -112,8 +112,17 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 }
 
 func (s *authService) Register(req dto.RegisterRequest) (*model.User, error) {
+	// Check if username already exists globally
+	existingUser, _ := s.userRepo.GetByUsername(req.Username)
+	if existingUser != nil {
+		log.Warn().
+			Str("username", req.Username).
+			Msg("Registration attempt with existing username")
+		return nil, errors.New("username already exists")
+	}
+
 	// Check if email already exists globally
-	existingUser, _ := s.userRepo.GetByEmailGlobal(req.Email)
+	existingUser, _ = s.userRepo.GetByEmailGlobal(req.Email)
 	if existingUser != nil {
 		log.Warn().
 			Str("email", req.Email).

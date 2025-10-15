@@ -12,7 +12,7 @@ type Role struct {
 	Description *string   `gorm:"type:text" json:"description,omitempty"`
 
 	// Relationships
-	Users []User `gorm:"foreignKey:RoleID;constraint:OnDelete:SET NULL" json:"users,omitempty"`
+	TenantUserRoles []TenantUserRole `gorm:"foreignKey:RoleID;constraint:OnDelete:CASCADE" json:"tenant_user_roles,omitempty"`
 }
 
 // TableName returns the table name for Role
