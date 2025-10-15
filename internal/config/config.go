@@ -27,7 +27,7 @@ type JWTConfig = struct {
 }
 
 type CORSConfig = struct {
-	Enable           bool   `mapstructure:"enable"`
+	Enabled          bool   `mapstructure:"enabled"`
 	AllowCredentials bool   `mapstructure:"allow_credentials"`
 	AllowedHeaders   string `mapstructure:"allowed_headers"`
 	AllowedMethods   string `mapstructure:"allowed_methods"`
@@ -38,6 +38,7 @@ type CORSConfig = struct {
 // Config holds all configuration for our application
 type Config struct {
 	Server struct {
+		Host                         string `mapstructure:"host"`
 		Port                         string `mapstructure:"port"`
 		Env                          string `mapstructure:"env"`
 		LogLevel                     string `mapstructure:"log_level"`
@@ -60,6 +61,17 @@ type Config struct {
 	} `mapstructure:"server"`
 
 	App struct {
+		Name        string `mapstructure:"name"`
+		Version     string `mapstructure:"version"`
+		Description string `mapstructure:"description"`
+		URL         string `mapstructure:"url"`
+		Timezone    string `mapstructure:"timezone"`
+		Locale      string `mapstructure:"locale"`
+		Pagination  struct {
+			DefaultLimit int  `mapstructure:"default_limit"`
+			MaxLimit     int  `mapstructure:"max_limit"`
+			Enabled      bool `mapstructure:"enabled"`
+		} `mapstructure:"pagination"`
 		CORS CORSConfig `mapstructure:"cors"`
 	} `mapstructure:"app"`
 
@@ -104,13 +116,25 @@ func Load() (*Config, error) {
 	var cfg Config
 
 	// Set defaults
+	viper.SetDefault("server.host", "0.0.0.0") // Bind to all interfaces by default
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.env", "development")
 	viper.SetDefault("server.log_level", "info")
 	viper.SetDefault("server.shutdown.cleanup_period_seconds", 3)
 	viper.SetDefault("server.shutdown.grace_period_seconds", 3)
 
-	viper.SetDefault("app.cors.enable", true)
+	// App defaults
+	viper.SetDefault("app.name", "KelasGo")
+	viper.SetDefault("app.version", "0.1.0")
+	viper.SetDefault("app.description", "KelasGo API Service")
+	viper.SetDefault("app.url", "http://localhost:8080")
+	viper.SetDefault("app.timezone", "UTC")
+	viper.SetDefault("app.locale", "en_US")
+	viper.SetDefault("app.pagination.default_limit", 10)
+	viper.SetDefault("app.pagination.max_limit", 100)
+	viper.SetDefault("app.pagination.enabled", true)
+
+	viper.SetDefault("app.cors.enabled", true)
 	viper.SetDefault("app.cors.allow_credentials", true)
 	viper.SetDefault("app.cors.allowed_headers", "Accept,Authorization,Content-Type")
 	viper.SetDefault("app.cors.allowed_methods", "GET,PUT,POST,PATCH,DELETE,OPTIONS")
@@ -198,10 +222,16 @@ func (c *Config) GetDSN() string {
 
 // GetServerAddress returns the server address
 func (c *Config) GetServerAddress() string {
-	return fmt.Sprintf(":%s", c.Server.Port)
+	if c.Server.Host == "" {
+		return fmt.Sprintf(":%s", c.Server.Port)
+	}
+	return fmt.Sprintf("%s:%s", c.Server.Host, c.Server.Port)
 }
 
-// GetHost returns the server host (defaults to localhost for binding)
+// GetHost returns the server host
 func (c *Config) GetHost() string {
-	return "localhost"
+	if c.Server.Host == "" {
+		return "0.0.0.0"
+	}
+	return c.Server.Host
 }

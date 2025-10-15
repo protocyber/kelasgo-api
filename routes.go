@@ -11,6 +11,7 @@ import (
 func SetupRoutes(r *gin.Engine, app *App) {
 	// Middleware
 	r.Use(middleware.RequestLogger(app.Config))
+	r.Use(middleware.AppContextMiddleware(app.Config)) // Add app context middleware
 	r.Use(middleware.CORSMiddleware(app.Config.App.CORS))
 	// Note: TenantMiddleware is now optional and applied per route group as needed
 
@@ -19,10 +20,28 @@ func SetupRoutes(r *gin.Engine, app *App) {
 
 	// Health check
 	api.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
+		// Example of using app context
+		appCtx, _ := middleware.GetAppContext(c)
+
+		response := gin.H{
 			"status":  "healthy",
 			"message": "KelasGo API is running",
-		})
+		}
+
+		// Add app info if context is available
+		if appCtx != nil {
+			response["app"] = gin.H{
+				"name":        appCtx.GetAppName(),
+				"version":     appCtx.GetAppVersion(),
+				"description": appCtx.GetAppDescription(),
+				"url":         appCtx.GetAppURL(),
+				"timezone":    appCtx.GetTimezone(),
+				"locale":      appCtx.GetLocale(),
+				"server_time": appCtx.Now(),
+			}
+		}
+
+		c.JSON(http.StatusOK, response)
 	})
 
 	// Auth routes (public - no tenant context required)

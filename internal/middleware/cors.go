@@ -13,7 +13,7 @@ import (
 func CORSMiddleware(corsConfig config.CORSConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Skip CORS if disabled
-		if !corsConfig.Enable {
+		if !corsConfig.Enabled {
 			c.Next()
 			return
 		}
@@ -41,7 +41,7 @@ func CORSMiddleware(corsConfig config.CORSConfig) gin.HandlerFunc {
 // CORSWithDefaults creates a CORS middleware with default settings (backward compatibility)
 func CORSWithDefaults() gin.HandlerFunc {
 	defaultConfig := config.CORSConfig{
-		Enable:           true,
+		Enabled:          true,
 		AllowCredentials: true,
 		AllowedHeaders:   "Origin, Content-Type, Accept, Authorization, X-Request-ID",
 		AllowedMethods:   "GET, POST, PUT, DELETE, OPTIONS",
