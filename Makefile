@@ -36,9 +36,10 @@ help:
 	@echo ""
 
 # Wire generation target - generates dependency injection code
-wire-gen: check-wire
+wire-gen:
 	@echo "⚡ Generating wire dependency injection..."
-	@wire
+	@go mod download
+	@go generate ./...
 	@echo "✅ Wire generation complete"
 
 # Main dev target
@@ -52,11 +53,11 @@ dev: wire-gen
 	elif [ "$$(uname)" = "Linux" ]; then \
 		echo "🐧 Linux detected"; \
 		echo "🚀 Starting backend API (Linux)..."; \
-		$$(go env GOPATH)/bin/air; \
+		@$$(go env GOPATH)/bin/air; \
 	else \
 		echo "🪟 Windows detected"; \
 		echo "🚀 Starting backend API (Windows)..."; \
-		$$(go env GOPATH)/bin/air; \
+		@$$(go env GOPATH)/bin/air; \
 	fi
 
 # Build target - compiles the application
@@ -91,8 +92,8 @@ migrate_force:
 migrate_version:
 	@migrate -path ./database/migrations/postgres -database "$(DB_CONN_POSTGRES)" version
 
-# migrate_drop:
-# 	@migrate -path ./database/migrations/postgres -database "$(DB_CONN_POSTGRES)" drop
+migrate_drop:
+	@migrate -path ./database/migrations/postgres -database "$(DB_CONN_POSTGRES)" drop
 
 # Run target - builds and runs the application
 run: build
@@ -119,14 +120,15 @@ install-wire:
 
 # Check wire installation
 check-wire:
-	@which wire > /dev/null || (echo "❌ Wire not found. Run 'make install-wire' first" && exit 1)
+	@test -f $$(go env GOPATH)/bin/wire || (echo "❌ Wire not found. Run 'make install-wire' first" && exit 1)
 	@echo "✅ Wire is installed"
 
-# Force wire regeneration (useful when wire files are corrupted)
-wire-force: check-wire
+# Force wire regeneration (useful when wire files is corrupted)
+wire-force:
 	@echo "⚡ Force regenerating wire dependency injection..."
 	@rm -f wire_gen.go
-	@wire
+	@go mod download
+	@go generate ./...
 	@echo "✅ Wire force regeneration complete"
 
 # Handle numeric arguments for migrate commands
