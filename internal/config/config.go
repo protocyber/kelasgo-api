@@ -99,7 +99,7 @@ type Config struct {
 	} `mapstructure:"encryption"`
 }
 
-// Load loads configuration from environment variables and config file
+// Load loads configuration from YAML file with fallback to environment variables
 func Load() (*Config, error) {
 	var cfg Config
 
@@ -107,8 +107,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.env", "development")
 	viper.SetDefault("server.log_level", "info")
-	viper.SetDefault("server.shutdown_cleanup_period_seconds", 3)
-	viper.SetDefault("server.shutdown_grace_period_seconds", 3)
+	viper.SetDefault("server.shutdown.cleanup_period_seconds", 3)
+	viper.SetDefault("server.shutdown.grace_period_seconds", 3)
 
 	viper.SetDefault("app.cors.enable", true)
 	viper.SetDefault("app.cors.allow_credentials", true)
@@ -125,20 +125,25 @@ func Load() (*Config, error) {
 	viper.SetDefault("cache.redis.primary.port", 6379)
 	viper.SetDefault("cache.redis.primary.db", 1)
 
-	// Read from .env file first
-	viper.SetConfigName(".env")
-	viper.SetConfigType("env")
+	viper.SetDefault("jwt.expire_time", 24)
+
+	// Read from YAML config file
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
 	viper.AddConfigPath("./")
 
-	// Read .env file if it exists
+	configLoaded := false
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// .env file not found, use environment variables and defaults
-			fmt.Println("No .env file found, using environment variables and defaults")
+			fmt.Println("⚠️  config.yaml not found. Using environment variables and defaults only.")
+			fmt.Println("💡 Create config.yaml from config.example.yaml for full configuration")
 		} else {
-			return nil, fmt.Errorf("error reading .env file: %w", err)
+			return nil, fmt.Errorf("error reading config.yaml file: %w", err)
 		}
+	} else {
+		configLoaded = true
+		fmt.Println("✅ Loaded configuration from config.yaml")
 	}
 
 	// Configure viper to handle environment variables with underscore replacement
@@ -151,7 +156,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
-	// Set JWT expire time manually (24 hours by default)
+	// Set JWT expire time manually if not set
 	if cfg.JWT.ExpireTime == 0 {
 		cfg.JWT.ExpireTime = 24
 	}
@@ -160,6 +165,15 @@ func Load() (*Config, error) {
 	cfg.Logger.Format = "json" // Default to JSON format
 	if cfg.Server.Env == "development" {
 		cfg.Logger.Format = "console"
+	}
+
+	// Copy server log level to logger level for backward compatibility
+	if cfg.Logger.Level == "" {
+		cfg.Logger.Level = cfg.Server.LogLevel
+	}
+
+	if configLoaded {
+		fmt.Printf("Configuration loaded successfully (env: %s, port: %s)\n", cfg.Server.Env, cfg.Server.Port)
 	}
 
 	return &cfg, nil
