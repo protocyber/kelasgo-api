@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/protocyber/kelasgo-api/internal/config"
+	"github.com/protocyber/kelasgo-api/internal/app"
 	"github.com/rs/zerolog/log"
 )
 
@@ -15,18 +15,13 @@ type HTTPServer struct {
 	router *gin.Engine
 }
 
-// App interface to avoid import cycle
-type App interface {
-	GetConfig() *config.Config
-}
-
 // SetupRoutesFunc is a function type for setting up routes
-type SetupRoutesFunc func(*gin.Engine, App)
+type SetupRoutesFunc func(*gin.Engine, *app.App)
 
 // NewHTTPServer creates a new HTTP server instance
-func NewHTTPServer(app App, setupRoutes SetupRoutesFunc) *HTTPServer {
+func NewHTTPServer(app *app.App, setupRoutes SetupRoutesFunc) *HTTPServer {
 	// Set Gin mode based on environment
-	cfg := app.GetConfig()
+	cfg := app.Config
 	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	} else {

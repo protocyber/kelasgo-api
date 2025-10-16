@@ -4,7 +4,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/protocyber/kelasgo-api/internal/dto"
+	"github.com/protocyber/kelasgo-api/internal/domain/dto"
 )
 
 // ParsePaginationParams parses pagination parameters from query string using app configuration

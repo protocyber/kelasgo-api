@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/protocyber/kelasgo-api/internal/database"
-	"github.com/protocyber/kelasgo-api/internal/model"
+	"github.com/protocyber/kelasgo-api/internal/domain/model"
+	"github.com/protocyber/kelasgo-api/internal/infrastructure/database"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )

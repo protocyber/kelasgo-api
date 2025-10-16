@@ -2,7 +2,7 @@ package repository
 
 import (
 	"github.com/google/uuid"
-	"github.com/protocyber/kelasgo-api/internal/database"
+	"github.com/protocyber/kelasgo-api/internal/infrastructure/database"
 	"github.com/protocyber/kelasgo-api/internal/util"
 	"gorm.io/gorm"
 )

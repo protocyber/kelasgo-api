@@ -13,7 +13,7 @@ This is a Go-based REST API service built with the following architecture:
 
 - **Language**: Go 1.21+
 - **Database**: PostgreSQL with read/write splitting support
-- **Dependency Injection**: Google Wire for compile-time DI
+- **Dependency Injection**: Manual dependency injection
 - **Configuration**: YAML-based configuration with environment variable overrides
 - **Hot Reloading**: Air for development
 - **Migration**: golang-migrate for database schema management
@@ -33,8 +33,11 @@ This is a Go-based REST API service built with the following architecture:
 ├── database/
 │   └── migrations/      # Database migration files
 ├── bin/                 # Compiled binaries
-├── config.yaml          # Configuration file
-├── wire.go             # Wire dependency injection setup
+├── configs/             # Configuration files
+│   ├── config.yaml      # Main configuration file
+│   └── config.example.yaml # Configuration template
+├── cmd/                 # Main applications
+│   └── kelasgo-api/     # API server entry point
 ├── main.go             # Application entry point
 └── Makefile            # Build and development commands
 ```
@@ -56,7 +59,7 @@ Key Go modules used in this project:
 - **Database**: PostgreSQL driver
 - **Configuration**: `spf13/viper` for YAML config management
 - **Migration**: `golang-migrate/migrate` for database migrations
-- **Dependency Injection**: `google/wire` for compile-time DI
+- **Dependency Injection**: Manual dependency injection pattern
 
 ### Development Guidelines
 
@@ -72,14 +75,12 @@ Key Go modules used in this project:
 ### Setup
 
 1. Clone repo
-1. Copy and paste `config.example.yaml` to `config.yaml`. Set your database and other configurations
+1. Copy and paste `configs/config.example.yaml` to `configs/config.yaml`. Set your database and other configurations
 1. Make sure you install the required tools:
    - [go-migrate](https://github.com/golang-migrate/migrate/tree/master/cmd/migrate#installation) - for database migrations
    - [yq](https://github.com/mikefarah/yq#install) - for YAML processing in Makefile
-   - [Google Wire](https://github.com/google/wire) - for dependency injection (run `make install-wire`)
    - [Air](https://github.com/air-verse/air) - for hot reloading during development (`go install github.com/air-verse/air@latest`)
 1. Verify your configuration: `make check-config`
-1. Generate dependency injection code: `make wire-gen`
 1. Run the migration: `make migrate_up`
 1. Run the service: `make dev`
 
@@ -124,7 +125,7 @@ app:
 | Command | Description |
 | --- | --- |
 | `make check-config` | Verify your configuration and show current database settings |
-| `cp config.example.yaml config.yaml` | Create your configuration file from the example |
+| `cp configs/config.example.yaml configs/config.yaml` | Create your configuration file from the example |
 
 **Environment Variable Overrides:**
 
@@ -133,27 +134,25 @@ You can still override any configuration using environment variables with dot no
 - `DB_PG_WRITE_HOST=newhost` overrides `db.pg.write.host`
 - `SERVER_PORT=9000` overrides `server.port`
 
-### Wire Dependency Injection
+### Dependency Injection
 
-This project uses [Google Wire](https://github.com/google/wire) for compile-time dependency injection. Wire generates the dependency injection code automatically based on your provider functions.
+This project uses manual dependency injection pattern to manage dependencies between components. All dependencies are manually wired in the `main.go` file's `initializeApp()` function.
 
-**Wire Commands:**
+**Key Benefits:**
 
-| Command | Description |
-| --- | --- |
-| `make install-wire` | Install Google Wire tool |
-| `make check-wire` | Verify Wire is installed |
-| `make wire-gen` | Generate dependency injection code (auto-runs before build/dev) |
-| `make wire-force` | Force regenerate Wire files (useful when corrupted) |
+- No external dependency injection framework required
+- Clear and explicit dependency relationships
+- Easy to debug and understand
+- Compile-time safety without code generation
 
-**Important Notes:**
+The initialization follows this order:
 
-- Wire code generation is automatically triggered when you run `make dev`, `make build`, or `make test`
-- The generated `wire_gen.go` file should not be manually edited
-- If you modify dependency providers in `wire.go`, run `make wire-gen` to regenerate the code
-- Wire files are cleaned up with `make clean`
-
-More info: [Google Wire Documentation](https://github.com/google/wire)
+1. Configuration loading
+2. Database connections
+3. Repositories (data access layer)
+4. Services (business logic layer)
+5. Handlers (HTTP layer)
+6. Application assembly
 
 ### Development Tools
 
@@ -194,7 +193,7 @@ go install github.com/air-verse/air@latest
 
 As you know above, we are using [go-migrate](https://github.com/golang-migrate/migrate) for the migration tool. We have simplify the frequently executed command into the Makefile.
 
-**Note: Make sure you configure your database settings in `config.yaml`:**
+**Note: Make sure you configure your database settings in `configs/config.yaml`:**
 
 ```yaml
 db:
@@ -208,7 +207,7 @@ db:
       sslmode: "disable"
 ```
 
-The migration commands will automatically read these settings from your `config.yaml` file using `yq`.
+The migration commands will automatically read these settings from your `configs/config.yaml` file using `yq`.
 
 | Command | Description |
 | --- | --- |

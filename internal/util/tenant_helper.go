@@ -2,7 +2,7 @@ package util
 
 import (
 	"github.com/google/uuid"
-	"github.com/protocyber/kelasgo-api/internal/database"
+	"github.com/protocyber/kelasgo-api/internal/infrastructure/database"
 )
 
 // TenantHelper provides utility functions for tenant operations

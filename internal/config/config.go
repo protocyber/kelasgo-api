@@ -154,8 +154,7 @@ func Load() (*Config, error) {
 	// Read from YAML config file
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("./")
+	viper.AddConfigPath("./configs")
 
 	configLoaded := false
 	if err := viper.ReadInConfig(); err != nil {

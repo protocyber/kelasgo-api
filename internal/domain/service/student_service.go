@@ -5,9 +5,9 @@ import (
 	"math"
 
 	"github.com/google/uuid"
-	"github.com/protocyber/kelasgo-api/internal/dto"
-	"github.com/protocyber/kelasgo-api/internal/model"
-	"github.com/protocyber/kelasgo-api/internal/repository"
+	"github.com/protocyber/kelasgo-api/internal/domain/dto"
+	"github.com/protocyber/kelasgo-api/internal/domain/model"
+	"github.com/protocyber/kelasgo-api/internal/domain/repository"
 	"github.com/rs/zerolog/log"
 )
 

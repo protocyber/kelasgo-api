@@ -6,8 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
-	"github.com/protocyber/kelasgo-api/internal/dto"
-	"github.com/protocyber/kelasgo-api/internal/service"
+	"github.com/protocyber/kelasgo-api/internal/domain/dto"
+	"github.com/protocyber/kelasgo-api/internal/domain/service"
 	"github.com/rs/zerolog/log"
 )
 

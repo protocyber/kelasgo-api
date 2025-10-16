@@ -1,7 +1,1 @@
-{
-  "go.buildTags": "wireinject",
-  "go.buildFlags": ["-tags=wireinject"],
-  "gopls": {
-    "buildFlags": ["-tags=wireinject"]
-  }
-}
+{}
