@@ -1,6 +1,6 @@
 module github.com/protocyber/kelasgo-api
 
-go 1.23.0
+go 1.25.3
 
 require (
 	github.com/gin-gonic/gin v1.11.0
@@ -8,7 +8,6 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.6.0
-	github.com/guregu/null/v5 v5.0.0
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/viper v1.19.0
 	golang.org/x/crypto v0.40.0
