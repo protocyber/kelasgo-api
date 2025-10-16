@@ -26,6 +26,16 @@ type App struct {
 	Config         *config.Config
 }
 
+// GetConfig returns the application configuration
+func (a *App) GetConfig() *config.Config {
+	return a.Config
+}
+
+// GetDBConns returns the database connections
+func (a *App) GetDBConns() *database.DatabaseConnections {
+	return a.DBConns
+}
+
 // ProviderSet contains all the wire providers
 var ProviderSet = wire.NewSet(
 	// Config
