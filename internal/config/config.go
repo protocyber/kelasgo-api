@@ -187,7 +187,7 @@ func Load() (*Config, error) {
 
 	// Set logger format
 	cfg.Logger.Format = "json" // Default to JSON format
-	if cfg.Server.Env == "development" {
+	if cfg.IsDevelopment() {
 		cfg.Logger.Format = "console"
 	}
 
@@ -234,4 +234,19 @@ func (c *Config) GetHost() string {
 		return "0.0.0.0"
 	}
 	return c.Server.Host
+}
+
+// IsProduction returns true if the server environment is production
+func (c *Config) IsProduction() bool {
+	return c.Server.Env == "production"
+}
+
+// IsDevelopment returns true if the server environment is development
+func (c *Config) IsDevelopment() bool {
+	return c.Server.Env == "development"
+}
+
+// IsStaging returns true if the server environment is staging
+func (c *Config) IsStaging() bool {
+	return c.Server.Env == "staging"
 }

@@ -34,7 +34,7 @@ func SetupLogger(cfg *config.Config) {
 	}
 
 	// Set log format
-	if cfg.Logger.Format == "console" || cfg.Server.Env == "development" {
+	if cfg.Logger.Format == "console" || cfg.IsDevelopment() {
 		log.Logger = log.Output(zerolog.ConsoleWriter{
 			Out:        os.Stdout,
 			TimeFormat: time.RFC3339,

@@ -30,7 +30,7 @@ func main() {
 	log.Info().Msg("Database connections healthy")
 
 	// Set Gin mode based on environment
-	if app.Config.Server.Env == "production" {
+	if app.Config.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	} else {
 		gin.SetMode(gin.DebugMode)
@@ -38,6 +38,7 @@ func main() {
 
 	// Create Gin router
 	r := gin.New()
+	r.Use(gin.Logger())
 
 	// Setup routes
 	SetupRoutes(r, app)

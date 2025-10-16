@@ -53,7 +53,7 @@ func RequestLogger(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		// Enhanced logging based on environment
-		if cfg.Server.Env == "development" {
+		if cfg.IsDevelopment() {
 			logEvent.
 				Str("method", c.Request.Method).
 				Str("uri", path).

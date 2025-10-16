@@ -10,7 +10,7 @@ import (
 // SetupRoutes configures all API routes
 func SetupRoutes(r *gin.Engine, app *App) {
 	// Middleware
-	r.Use(middleware.RequestLogger(app.Config))
+	// r.Use(middleware.RequestLogger(app.Config))
 	r.Use(middleware.AppContextMiddleware(app.Config)) // Add app context middleware
 	r.Use(middleware.CORSMiddleware(app.Config.App.CORS))
 	// Note: TenantMiddleware is now optional and applied per route group as needed
