@@ -46,9 +46,8 @@ func (r *userRepository) Create(user *model.User) error {
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("username", user.Username).
-			Str("email", user.Email).
-			Msg("Failed to create user in database")
+			Str("operation", "create_user").
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -58,9 +57,6 @@ func (r *userRepository) GetByID(id uuid.UUID) (*model.User, error) {
 	err := r.db.Read.Preload("TenantUsers").First(&user, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Debug().
-				Str("user_id", id.String()).
-				Msg("User not found in database")
 			return nil, errors.New("user not found")
 		}
 		log.Error().
@@ -101,15 +97,12 @@ func (r *userRepository) GetByEmailGlobal(email string) (*model.User, error) {
 	err := r.db.Read.Where("email = ?", email).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Debug().
-				Str("email", email).
-				Msg("User not found by email globally")
 			return nil, errors.New("user not found")
 		}
 		log.Error().
 			Err(err).
 			Str("email", email).
-			Msg("Database error while getting user by email globally")
+			Msg("Database error while getting user by email (global)")
 		return nil, err
 	}
 	return &user, nil
@@ -121,8 +114,8 @@ func (r *userRepository) GetUserTenants(userID uuid.UUID) ([]model.TenantUser, e
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("user_id", userID.String()).
-			Msg("Failed to get user tenants from database")
+			Str("operation", "get_user_tenants").
+			Msg("Database query failed")
 		return nil, err
 	}
 	return tenantUsers, nil
@@ -133,9 +126,8 @@ func (r *userRepository) Update(user *model.User) error {
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("user_id", user.ID.String()).
-			Str("username", user.Username).
-			Msg("Failed to update user in database")
+			Str("operation", "update_user").
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -145,8 +137,8 @@ func (r *userRepository) Delete(id uuid.UUID) error {
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("user_id", id.String()).
-			Msg("Failed to delete user from database")
+			Str("operation", "delete_user").
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -160,8 +152,9 @@ func (r *userRepository) BulkDelete(ids []uuid.UUID) error {
 	if err != nil {
 		log.Error().
 			Err(err).
-			Interface("ids", ids).
-			Msg("Failed to bulk delete users from database")
+			Str("operation", "bulk_delete_users").
+			Int("count", len(ids)).
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -181,8 +174,8 @@ func (r *userRepository) List(offset, limit int, search string) ([]model.User, i
 	if err := query.Model(&model.User{}).Count(&total).Error; err != nil {
 		log.Error().
 			Err(err).
-			Str("search", search).
-			Msg("Failed to count users in List method")
+			Str("operation", "count_users").
+			Msg("Database query failed")
 		return nil, 0, err
 	}
 
@@ -191,10 +184,8 @@ func (r *userRepository) List(offset, limit int, search string) ([]model.User, i
 	if err != nil {
 		log.Error().
 			Err(err).
-			Int("offset", offset).
-			Int("limit", limit).
-			Str("search", search).
-			Msg("Failed to list users from database in List method")
+			Str("operation", "list_users").
+			Msg("Database query failed")
 	}
 	return users, total, err
 }
@@ -247,11 +238,6 @@ func (r *userRepository) GetUsersByRole(roleID uuid.UUID, offset, limit int) ([]
 
 func (r *userRepository) GetByUsernameAndTenant(username string, tenantID uuid.UUID) (*model.User, error) {
 	if err := r.SetTenantContext(tenantID); err != nil {
-		log.Error().
-			Err(err).
-			Str("username", username).
-			Str("tenant_id", tenantID.String()).
-			Msg("Failed to set tenant context for GetByUsernameAndTenant")
 		return nil, err
 	}
 
@@ -263,17 +249,12 @@ func (r *userRepository) GetByUsernameAndTenant(username string, tenantID uuid.U
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Debug().
-				Str("username", username).
-				Str("tenant_id", tenantID.String()).
-				Msg("User not found by username and tenant")
 			return nil, errors.New("user not found")
 		}
 		log.Error().
 			Err(err).
-			Str("username", username).
-			Str("tenant_id", tenantID.String()).
-			Msg("Database error in GetByUsernameAndTenant")
+			Str("operation", "get_user_by_username_tenant").
+			Msg("Database query failed")
 		return nil, err
 	}
 	return &user, nil

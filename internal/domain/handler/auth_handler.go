@@ -8,11 +8,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/domain/dto"
 	"github.com/protocyber/kelasgo-api/internal/domain/service"
-	"github.com/rs/zerolog/log"
 )
 
 // AuthHandler handles authentication related requests
 type AuthHandler struct {
+	BaseHandler
 	authService service.AuthService
 	validator   *validator.Validate
 }
@@ -27,12 +27,12 @@ func NewAuthHandler(authService service.AuthService, validator *validator.Valida
 
 // Login handles user login
 func (h *AuthHandler) Login(c *gin.Context) {
+	h.InitLogger(c)
+
 	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error().
+		h.log.Error().
 			Err(err).
-			Str("remote_ip", c.ClientIP()).
-			Str("user_agent", c.Request.UserAgent()).
 			Msg("Failed to bind login request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -43,10 +43,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		log.Warn().
+		h.log.Warn().
 			Err(err).
 			Str("email", req.Email).
-			Str("remote_ip", c.ClientIP()).
 			Msg("Login request validation failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -58,11 +57,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	response, err := h.authService.Login(req)
 	if err != nil {
-		log.Warn().
-			Err(err).
-			Str("email", req.Email).
-			Str("remote_ip", c.ClientIP()).
-			Msg("Login attempt failed")
 		c.JSON(http.StatusUnauthorized, dto.Response{
 			Success: false,
 			Message: "Login failed",
@@ -70,18 +64,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		})
 		return
 	}
-
-	tenantIDStr := "none"
-	if response.User.TenantID != nil {
-		tenantIDStr = response.User.TenantID.String()
-	}
-
-	log.Info().
-		Str("user_id", response.User.ID.String()).
-		Str("email", response.User.Email).
-		Str("tenant_id", tenantIDStr).
-		Str("remote_ip", c.ClientIP()).
-		Msg("User logged in successfully")
 
 	c.JSON(http.StatusOK, dto.Response{
 		Success: true,
@@ -92,11 +74,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 // Register handles user registration
 func (h *AuthHandler) Register(c *gin.Context) {
+	h.InitLogger(c)
+
 	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error().
+		h.log.Error().
 			Err(err).
-			Str("remote_ip", c.ClientIP()).
 			Msg("Failed to bind registration request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -107,11 +90,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		log.Warn().
+		h.log.Warn().
 			Err(err).
 			Str("username", req.Username).
 			Str("email", req.Email).
-			Str("remote_ip", c.ClientIP()).
 			Msg("Registration request validation failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -123,12 +105,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	user, err := h.authService.Register(req)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("username", req.Username).
-			Str("email", req.Email).
-			Str("remote_ip", c.ClientIP()).
-			Msg("User registration failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Registration failed",
@@ -136,13 +112,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		})
 		return
 	}
-
-	log.Info().
-		Str("user_id", user.ID.String()).
-		Str("username", user.Username).
-		Str("email", req.Email).
-		Str("remote_ip", c.ClientIP()).
-		Msg("User registered successfully")
 
 	c.JSON(http.StatusCreated, dto.Response{
 		Success: true,
@@ -153,10 +122,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 // ChangePassword handles password change
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	h.InitLogger(c)
+
 	userIDInterface, exists := c.Get("user_id")
 	if !exists || userIDInterface == nil {
-		log.Error().
-			Str("remote_ip", c.ClientIP()).
+		h.log.Error().
 			Bool("exists", exists).
 			Interface("user_id", userIDInterface).
 			Msg("User ID not found in context during password change")
@@ -170,8 +140,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 	userID, ok := userIDInterface.(uuid.UUID)
 	if !ok {
-		log.Error().
-			Str("remote_ip", c.ClientIP()).
+		h.log.Error().
 			Interface("user_id", userIDInterface).
 			Msg("Invalid user ID format in context during password change")
 		c.JSON(http.StatusUnauthorized, dto.Response{
@@ -184,10 +153,9 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 	var req dto.ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error().
+		h.log.Error().
 			Err(err).
 			Str("user_id", userID.String()).
-			Str("remote_ip", c.ClientIP()).
 			Msg("Failed to bind change password request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -198,10 +166,9 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		log.Warn().
+		h.log.Warn().
 			Err(err).
 			Str("user_id", userID.String()).
-			Str("remote_ip", c.ClientIP()).
 			Msg("Change password request validation failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -213,11 +180,6 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 	err := h.authService.ChangePassword(userID, req)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("user_id", userID.String()).
-			Str("remote_ip", c.ClientIP()).
-			Msg("Password change failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Failed to change password",
@@ -225,11 +187,6 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		})
 		return
 	}
-
-	log.Info().
-		Str("user_id", userID.String()).
-		Str("remote_ip", c.ClientIP()).
-		Msg("Password changed successfully via handler")
 
 	c.JSON(http.StatusOK, dto.Response{
 		Success: true,
@@ -239,10 +196,11 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 // SelectTenant handles tenant selection after authentication
 func (h *AuthHandler) SelectTenant(c *gin.Context) {
+	h.InitLogger(c)
+
 	userIDInterface, exists := c.Get("user_id")
 	if !exists || userIDInterface == nil {
-		log.Error().
-			Str("remote_ip", c.ClientIP()).
+		h.log.Error().
 			Bool("exists", exists).
 			Interface("user_id", userIDInterface).
 			Msg("User ID not found in context during tenant selection")
@@ -256,8 +214,7 @@ func (h *AuthHandler) SelectTenant(c *gin.Context) {
 
 	userID, ok := userIDInterface.(uuid.UUID)
 	if !ok {
-		log.Error().
-			Str("remote_ip", c.ClientIP()).
+		h.log.Error().
 			Interface("user_id", userIDInterface).
 			Msg("Invalid user ID format in context during tenant selection")
 		c.JSON(http.StatusUnauthorized, dto.Response{
@@ -270,10 +227,9 @@ func (h *AuthHandler) SelectTenant(c *gin.Context) {
 
 	var req dto.TenantSelectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error().
+		h.log.Error().
 			Err(err).
 			Str("user_id", userID.String()).
-			Str("remote_ip", c.ClientIP()).
 			Msg("Failed to bind tenant selection request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -284,11 +240,10 @@ func (h *AuthHandler) SelectTenant(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		log.Warn().
+		h.log.Warn().
 			Err(err).
 			Str("user_id", userID.String()).
 			Str("tenant_id", req.TenantID).
-			Str("remote_ip", c.ClientIP()).
 			Msg("Tenant selection request validation failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -300,12 +255,6 @@ func (h *AuthHandler) SelectTenant(c *gin.Context) {
 
 	response, err := h.authService.SelectTenant(userID, req)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("user_id", userID.String()).
-			Str("tenant_id", req.TenantID).
-			Str("remote_ip", c.ClientIP()).
-			Msg("Tenant selection failed")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Tenant selection failed",
@@ -313,12 +262,6 @@ func (h *AuthHandler) SelectTenant(c *gin.Context) {
 		})
 		return
 	}
-
-	log.Info().
-		Str("user_id", userID.String()).
-		Str("tenant_id", req.TenantID).
-		Str("remote_ip", c.ClientIP()).
-		Msg("Tenant selected successfully")
 
 	c.JSON(http.StatusOK, dto.Response{
 		Success: true,
@@ -329,10 +272,11 @@ func (h *AuthHandler) SelectTenant(c *gin.Context) {
 
 // GetUserTenants handles getting all tenants for the authenticated user
 func (h *AuthHandler) GetUserTenants(c *gin.Context) {
+	h.InitLogger(c)
+
 	userIDInterface, exists := c.Get("user_id")
 	if !exists || userIDInterface == nil {
-		log.Error().
-			Str("remote_ip", c.ClientIP()).
+		h.log.Error().
 			Bool("exists", exists).
 			Interface("user_id", userIDInterface).
 			Msg("User ID not found in context during get user tenants")
@@ -346,8 +290,7 @@ func (h *AuthHandler) GetUserTenants(c *gin.Context) {
 
 	userID, ok := userIDInterface.(uuid.UUID)
 	if !ok {
-		log.Error().
-			Str("remote_ip", c.ClientIP()).
+		h.log.Error().
 			Interface("user_id", userIDInterface).
 			Msg("Invalid user ID format in context during get user tenants")
 		c.JSON(http.StatusUnauthorized, dto.Response{
@@ -360,11 +303,6 @@ func (h *AuthHandler) GetUserTenants(c *gin.Context) {
 
 	tenants, err := h.authService.GetUserTenants(userID)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("user_id", userID.String()).
-			Str("remote_ip", c.ClientIP()).
-			Msg("Failed to get user tenants")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
 			Message: "Failed to get user tenants",
@@ -372,12 +310,6 @@ func (h *AuthHandler) GetUserTenants(c *gin.Context) {
 		})
 		return
 	}
-
-	log.Info().
-		Str("user_id", userID.String()).
-		Int("tenant_count", len(tenants)).
-		Str("remote_ip", c.ClientIP()).
-		Msg("User tenants retrieved successfully")
 
 	c.JSON(http.StatusOK, dto.Response{
 		Success: true,

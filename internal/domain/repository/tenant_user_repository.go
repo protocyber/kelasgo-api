@@ -38,20 +38,14 @@ func NewTenantUserRepository(db *database.DatabaseConnections) TenantUserReposit
 
 func (r *tenantUserRepository) Create(tenantUser *model.TenantUser) error {
 	if err := r.SetTenantContext(tenantUser.TenantID); err != nil {
-		log.Error().
-			Err(err).
-			Str("tenant_id", tenantUser.TenantID.String()).
-			Str("user_id", tenantUser.UserID.String()).
-			Msg("Failed to set tenant context for tenant-user creation")
 		return err
 	}
 	err := r.db.Write.Create(tenantUser).Error
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_id", tenantUser.TenantID.String()).
-			Str("user_id", tenantUser.UserID.String()).
-			Msg("Failed to create tenant-user relationship in database")
+			Str("operation", "create_tenant_user").
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -127,20 +121,14 @@ func (r *tenantUserRepository) GetByUser(userID uuid.UUID, offset, limit int) ([
 
 func (r *tenantUserRepository) Update(tenantUser *model.TenantUser) error {
 	if err := r.SetTenantContext(tenantUser.TenantID); err != nil {
-		log.Error().
-			Err(err).
-			Str("tenant_id", tenantUser.TenantID.String()).
-			Str("user_id", tenantUser.UserID.String()).
-			Msg("Failed to set tenant context for tenant-user update")
 		return err
 	}
 	err := r.db.Write.Save(tenantUser).Error
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_id", tenantUser.TenantID.String()).
-			Str("user_id", tenantUser.UserID.String()).
-			Msg("Failed to update tenant-user relationship in database")
+			Str("operation", "update_tenant_user").
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -158,8 +146,9 @@ func (r *tenantUserRepository) BulkDelete(ids []uuid.UUID) error {
 	if err != nil {
 		log.Error().
 			Err(err).
-			Interface("ids", ids).
-			Msg("Failed to bulk delete tenant users from database")
+			Str("operation", "bulk_delete_tenant_users").
+			Int("count", len(ids)).
+			Msg("Database write operation failed")
 	}
 	return err
 }

@@ -38,21 +38,14 @@ func NewStudentRepository(db *database.DatabaseConnections) StudentRepository {
 
 func (r *studentRepository) Create(student *model.Student) error {
 	if err := r.SetTenantContext(student.TenantID); err != nil {
-		log.Error().
-			Err(err).
-			Str("student_number", student.StudentNumber).
-			Str("tenant_id", student.TenantID.String()).
-			Msg("Failed to set tenant context for student creation")
 		return err
 	}
 	err := r.db.Write.Create(student).Error
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("student_number", student.StudentNumber).
-			Str("tenant_id", student.TenantID.String()).
-			Str("tenant_user_id", student.TenantUserID.String()).
-			Msg("Failed to create student in database")
+			Str("operation", "create_student").
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -62,9 +55,6 @@ func (r *studentRepository) GetByID(id uuid.UUID) (*model.Student, error) {
 	err := r.db.Read.Preload("TenantUser.User").Preload("Class").Preload("Parent").First(&student, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Debug().
-				Str("student_id", id.String()).
-				Msg("Student not found by ID")
 			return nil, errors.New("student not found")
 		}
 		log.Error().
@@ -78,11 +68,6 @@ func (r *studentRepository) GetByID(id uuid.UUID) (*model.Student, error) {
 
 func (r *studentRepository) GetByStudentNumber(studentNumber string, tenantID uuid.UUID) (*model.Student, error) {
 	if err := r.SetTenantContext(tenantID); err != nil {
-		log.Error().
-			Err(err).
-			Str("student_number", studentNumber).
-			Str("tenant_id", tenantID.String()).
-			Msg("Failed to set tenant context for GetByStudentNumber")
 		return nil, err
 	}
 
@@ -91,17 +76,12 @@ func (r *studentRepository) GetByStudentNumber(studentNumber string, tenantID uu
 		Where("student_number = ? AND tenant_id = ?", studentNumber, tenantID).First(&student).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Debug().
-				Str("student_number", studentNumber).
-				Str("tenant_id", tenantID.String()).
-				Msg("Student not found by student number")
 			return nil, errors.New("student not found")
 		}
 		log.Error().
 			Err(err).
-			Str("student_number", studentNumber).
-			Str("tenant_id", tenantID.String()).
-			Msg("Database error in GetByStudentNumber")
+			Str("operation", "get_student_by_number").
+			Msg("Database query failed")
 		return nil, err
 	}
 	return &student, nil
@@ -113,9 +93,6 @@ func (r *studentRepository) GetByTenantUserID(tenantUserID uuid.UUID) (*model.St
 		Where("tenant_user_id = ?", tenantUserID).First(&student).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Debug().
-				Str("tenant_user_id", tenantUserID.String()).
-				Msg("Student not found by tenant user ID")
 			return nil, errors.New("student not found")
 		}
 		log.Error().
@@ -129,22 +106,14 @@ func (r *studentRepository) GetByTenantUserID(tenantUserID uuid.UUID) (*model.St
 
 func (r *studentRepository) Update(student *model.Student) error {
 	if err := r.SetTenantContext(student.TenantID); err != nil {
-		log.Error().
-			Err(err).
-			Str("student_id", student.ID.String()).
-			Str("student_number", student.StudentNumber).
-			Str("tenant_id", student.TenantID.String()).
-			Msg("Failed to set tenant context for student update")
 		return err
 	}
 	err := r.db.Write.Save(student).Error
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("student_id", student.ID.String()).
-			Str("student_number", student.StudentNumber).
-			Str("tenant_id", student.TenantID.String()).
-			Msg("Failed to update student in database")
+			Str("operation", "update_student").
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -154,8 +123,8 @@ func (r *studentRepository) Delete(id uuid.UUID) error {
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("student_id", id.String()).
-			Msg("Failed to delete student from database")
+			Str("operation", "delete_student").
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -169,21 +138,15 @@ func (r *studentRepository) BulkDelete(ids []uuid.UUID) error {
 	if err != nil {
 		log.Error().
 			Err(err).
-			Interface("ids", ids).
-			Msg("Failed to bulk delete students from database")
+			Str("operation", "bulk_delete_students").
+			Int("count", len(ids)).
+			Msg("Database write operation failed")
 	}
 	return err
 }
 
 func (r *studentRepository) List(tenantID uuid.UUID, offset, limit int, search string) ([]model.Student, int64, error) {
 	if err := r.SetTenantContext(tenantID); err != nil {
-		log.Error().
-			Err(err).
-			Str("tenant_id", tenantID.String()).
-			Int("offset", offset).
-			Int("limit", limit).
-			Str("search", search).
-			Msg("Failed to set tenant context for student list")
 		return nil, 0, err
 	}
 
@@ -204,9 +167,8 @@ func (r *studentRepository) List(tenantID uuid.UUID, offset, limit int, search s
 	if err := query.Model(&model.Student{}).Count(&total).Error; err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_id", tenantID.String()).
-			Str("search", search).
-			Msg("Failed to count students in List method")
+			Str("operation", "count_students").
+			Msg("Database query failed")
 		return nil, 0, err
 	}
 
@@ -215,24 +177,14 @@ func (r *studentRepository) List(tenantID uuid.UUID, offset, limit int, search s
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_id", tenantID.String()).
-			Int("offset", offset).
-			Int("limit", limit).
-			Str("search", search).
-			Msg("Failed to list students from database")
+			Str("operation", "list_students").
+			Msg("Database query failed")
 	}
 	return students, total, err
 }
 
 func (r *studentRepository) GetByClass(tenantID, classID uuid.UUID, offset, limit int) ([]model.Student, int64, error) {
 	if err := r.SetTenantContext(tenantID); err != nil {
-		log.Error().
-			Err(err).
-			Str("tenant_id", tenantID.String()).
-			Str("class_id", classID.String()).
-			Int("offset", offset).
-			Int("limit", limit).
-			Msg("Failed to set tenant context for GetByClass")
 		return nil, 0, err
 	}
 
@@ -246,9 +198,8 @@ func (r *studentRepository) GetByClass(tenantID, classID uuid.UUID, offset, limi
 	if err := query.Model(&model.Student{}).Count(&total).Error; err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_id", tenantID.String()).
-			Str("class_id", classID.String()).
-			Msg("Failed to count students by class")
+			Str("operation", "count_students_by_class").
+			Msg("Database query failed")
 		return nil, 0, err
 	}
 
@@ -257,24 +208,14 @@ func (r *studentRepository) GetByClass(tenantID, classID uuid.UUID, offset, limi
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_id", tenantID.String()).
-			Str("class_id", classID.String()).
-			Int("offset", offset).
-			Int("limit", limit).
-			Msg("Failed to get students by class from database")
+			Str("operation", "get_students_by_class").
+			Msg("Database query failed")
 	}
 	return students, total, err
 }
 
 func (r *studentRepository) GetByParent(tenantID, parentID uuid.UUID, offset, limit int) ([]model.Student, int64, error) {
 	if err := r.SetTenantContext(tenantID); err != nil {
-		log.Error().
-			Err(err).
-			Str("tenant_id", tenantID.String()).
-			Str("parent_id", parentID.String()).
-			Int("offset", offset).
-			Int("limit", limit).
-			Msg("Failed to set tenant context for GetByParent")
 		return nil, 0, err
 	}
 
@@ -288,9 +229,8 @@ func (r *studentRepository) GetByParent(tenantID, parentID uuid.UUID, offset, li
 	if err := query.Model(&model.Student{}).Count(&total).Error; err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_id", tenantID.String()).
-			Str("parent_id", parentID.String()).
-			Msg("Failed to count students by parent")
+			Str("operation", "count_students_by_parent").
+			Msg("Database query failed")
 		return nil, 0, err
 	}
 
@@ -299,11 +239,8 @@ func (r *studentRepository) GetByParent(tenantID, parentID uuid.UUID, offset, li
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_id", tenantID.String()).
-			Str("parent_id", parentID.String()).
-			Int("offset", offset).
-			Int("limit", limit).
-			Msg("Failed to get students by parent from database")
+			Str("operation", "get_students_by_parent").
+			Msg("Database query failed")
 	}
 	return students, total, err
 }

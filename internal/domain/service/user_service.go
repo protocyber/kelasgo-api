@@ -161,12 +161,6 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 		}
 	}
 
-	log.Info().
-		Str("user_id", user.ID.String()).
-		Str("username", user.Username).
-		Str("tenant_id", tenantID.String()).
-		Msg("User created successfully")
-
 	return user, nil
 }
 
@@ -319,17 +313,12 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 		return nil, errors.New("failed to update user")
 	}
 
-	log.Info().
-		Str("user_id", id.String()).
-		Str("username", user.Username).
-		Msg("User updated successfully")
-
 	return user, nil
 }
 
 func (s *userService) Delete(id uuid.UUID) error {
 	// Check if user exists
-	user, err := s.userRepo.GetByID(id)
+	_, err := s.userRepo.GetByID(id)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -346,11 +335,6 @@ func (s *userService) Delete(id uuid.UUID) error {
 			Msg("Failed to delete user from database")
 		return err
 	}
-
-	log.Info().
-		Str("user_id", id.String()).
-		Str("username", user.Username).
-		Msg("User deleted successfully")
 
 	return nil
 }
@@ -410,13 +394,6 @@ func (s *userService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
 		return errors.New("failed to bulk delete users")
 	}
 
-	log.Info().
-		Str("tenant_id", tenantID.String()).
-		Interface("user_ids", validIDs).
-		Int("deleted_count", len(validIDs)).
-		Interface("invalid_ids", invalidIDs).
-		Msg("Users bulk deleted successfully")
-
 	return nil
 }
 
@@ -442,8 +419,7 @@ func (s *userService) List(tenantID uuid.UUID, params dto.UserQueryParams) ([]mo
 				Err(err).
 				Str("tenant_id", tenantID.String()).
 				Str("role_id", params.RoleID.String()).
-				Int("page", params.Page).
-				Int("limit", params.Limit).
+				Interface("params", params).
 				Msg("Failed to get users by role")
 		}
 	} else {
@@ -452,9 +428,7 @@ func (s *userService) List(tenantID uuid.UUID, params dto.UserQueryParams) ([]mo
 			log.Error().
 				Err(err).
 				Str("tenant_id", tenantID.String()).
-				Str("search", params.Search).
-				Int("page", params.Page).
-				Int("limit", params.Limit).
+				Interface("params", params).
 				Msg("Failed to get users by tenant")
 		}
 	}

@@ -34,20 +34,14 @@ func NewRoleRepository(db *database.DatabaseConnections) RoleRepository {
 
 func (r *roleRepository) Create(role *model.Role) error {
 	if err := r.SetTenantContext(role.TenantID); err != nil {
-		log.Error().
-			Err(err).
-			Str("role_name", role.Name).
-			Str("tenant_id", role.TenantID.String()).
-			Msg("Failed to set tenant context for role creation")
 		return err
 	}
 	err := r.db.Write.Create(role).Error
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("role_name", role.Name).
-			Str("tenant_id", role.TenantID.String()).
-			Msg("Failed to create role in database")
+			Str("operation", "create_role").
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -57,9 +51,6 @@ func (r *roleRepository) GetByID(id uuid.UUID) (*model.Role, error) {
 	err := r.db.Read.First(&role, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Debug().
-				Str("role_id", id.String()).
-				Msg("Role not found by ID")
 			return nil, errors.New("role not found")
 		}
 		log.Error().

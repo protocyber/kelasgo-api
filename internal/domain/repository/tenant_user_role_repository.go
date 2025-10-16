@@ -37,9 +37,8 @@ func (r *tenantUserRoleRepository) Create(tenantUserRole *model.TenantUserRole) 
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_user_id", tenantUserRole.TenantUserID.String()).
-			Str("role_id", tenantUserRole.RoleID.String()).
-			Msg("Failed to create tenant user-role relationship in database")
+			Str("operation", "create_tenant_user_role").
+			Msg("Database write operation failed")
 	}
 	return err
 }
@@ -84,8 +83,8 @@ func (r *tenantUserRoleRepository) DeleteAllTenantUserRoles(tenantUserID uuid.UU
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("tenant_user_id", tenantUserID.String()).
-			Msg("Failed to delete all tenant user roles from database")
+			Str("operation", "delete_all_tenant_user_roles").
+			Msg("Database write operation failed")
 	}
 	return err
 }

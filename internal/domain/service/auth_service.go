@@ -160,12 +160,6 @@ func (s *authService) Register(req dto.RegisterRequest) (*model.User, error) {
 		return nil, errors.New("failed to create user")
 	}
 
-	log.Info().
-		Str("user_id", user.ID.String()).
-		Str("email", req.Email).
-		Str("username", req.Username).
-		Msg("User registered successfully without tenant")
-
 	return user, nil
 }
 
@@ -297,11 +291,6 @@ func (s *authService) ChangePassword(userID uuid.UUID, req dto.ChangePasswordReq
 			Msg("Failed to update password in database")
 		return errors.New("failed to update password")
 	}
-
-	log.Info().
-		Str("user_id", userID.String()).
-		Str("username", user.Username).
-		Msg("Password changed successfully")
 
 	return nil
 }

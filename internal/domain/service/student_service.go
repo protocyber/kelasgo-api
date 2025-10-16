@@ -92,12 +92,6 @@ func (s *studentService) Create(tenantID uuid.UUID, req dto.CreateStudentRequest
 		return nil, errors.New("failed to create student")
 	}
 
-	log.Info().
-		Str("student_id", student.ID.String()).
-		Str("student_number", student.StudentNumber).
-		Str("tenant_id", tenantID.String()).
-		Msg("Student created successfully")
-
 	return student, nil
 }
 
@@ -160,17 +154,12 @@ func (s *studentService) Update(id uuid.UUID, req dto.UpdateStudentRequest) (*mo
 		return nil, errors.New("failed to update student")
 	}
 
-	log.Info().
-		Str("student_id", id.String()).
-		Str("student_number", student.StudentNumber).
-		Msg("Student updated successfully")
-
 	return student, nil
 }
 
 func (s *studentService) Delete(id uuid.UUID) error {
 	// Check if student exists
-	student, err := s.studentRepo.GetByID(id)
+	_, err := s.studentRepo.GetByID(id)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -187,11 +176,6 @@ func (s *studentService) Delete(id uuid.UUID) error {
 			Msg("Failed to delete student from database")
 		return err
 	}
-
-	log.Info().
-		Str("student_id", id.String()).
-		Str("student_number", student.StudentNumber).
-		Msg("Student deleted successfully")
 
 	return nil
 }
@@ -251,13 +235,6 @@ func (s *studentService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
 		return errors.New("failed to bulk delete students")
 	}
 
-	log.Info().
-		Str("tenant_id", tenantID.String()).
-		Interface("student_ids", validIDs).
-		Int("deleted_count", len(validIDs)).
-		Interface("invalid_ids", invalidIDs).
-		Msg("Students bulk deleted successfully")
-
 	return nil
 }
 
@@ -283,8 +260,7 @@ func (s *studentService) List(tenantID uuid.UUID, params dto.StudentQueryParams)
 				Err(err).
 				Str("tenant_id", tenantID.String()).
 				Str("class_id", params.ClassID.String()).
-				Int("page", params.Page).
-				Int("limit", params.Limit).
+				Interface("params", params).
 				Msg("Failed to get students by class")
 		}
 	} else if params.ParentID != nil {
@@ -294,8 +270,7 @@ func (s *studentService) List(tenantID uuid.UUID, params dto.StudentQueryParams)
 				Err(err).
 				Str("tenant_id", tenantID.String()).
 				Str("parent_id", params.ParentID.String()).
-				Int("page", params.Page).
-				Int("limit", params.Limit).
+				Interface("params", params).
 				Msg("Failed to get students by parent")
 		}
 	} else {
@@ -304,9 +279,7 @@ func (s *studentService) List(tenantID uuid.UUID, params dto.StudentQueryParams)
 			log.Error().
 				Err(err).
 				Str("tenant_id", tenantID.String()).
-				Str("search", params.Search).
-				Int("page", params.Page).
-				Int("limit", params.Limit).
+				Interface("params", params).
 				Msg("Failed to get students by tenant")
 		}
 	}
@@ -344,8 +317,7 @@ func (s *studentService) GetByClass(tenantID, classID uuid.UUID, params dto.Quer
 			Err(err).
 			Str("tenant_id", tenantID.String()).
 			Str("class_id", classID.String()).
-			Int("page", params.Page).
-			Int("limit", params.Limit).
+			Interface("params", params).
 			Msg("Failed to get students by class")
 		return nil, nil, err
 	}
@@ -379,8 +351,7 @@ func (s *studentService) GetByParent(tenantID, parentID uuid.UUID, params dto.Qu
 			Err(err).
 			Str("tenant_id", tenantID.String()).
 			Str("parent_id", parentID.String()).
-			Int("page", params.Page).
-			Int("limit", params.Limit).
+			Interface("params", params).
 			Msg("Failed to get students by parent")
 		return nil, nil, err
 	}
