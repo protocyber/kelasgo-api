@@ -34,3 +34,10 @@ configs/config.yaml
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# OS files, swap files, etc.
+.DS_Store
+*.log
+Thumbs.db
+*.swp
+*~

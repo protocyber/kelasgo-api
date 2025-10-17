@@ -6,11 +6,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const (
-	// RequestIDKey is the context key for request ID
-	RequestIDKey = "request_id"
-)
-
 // ContextLogger provides logging methods with automatic request ID inclusion
 type ContextLogger struct {
 	requestID string

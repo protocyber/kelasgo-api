@@ -5,22 +5,30 @@ import (
 	"time"
 
 	"github.com/protocyber/kelasgo-api/internal/config"
+	"github.com/rs/zerolog"
 )
 
 // AppContextKey defines keys for context values
 type AppContextKey string
 
 const (
-	AppConfigKey AppContextKey = "app_config"
-	TimezoneKey  AppContextKey = "timezone"
-	LocaleKey    AppContextKey = "locale"
+	AppConfigKey   AppContextKey = "app_config"
+	TimezoneKey    AppContextKey = "timezone"
+	LocaleKey      AppContextKey = "locale"
+	RequestIDKey   AppContextKey = "request_id"
+	TenantIDKey    AppContextKey = "tenant_id"
+	CurrentUserKey AppContextKey = "current_user"
 )
 
 // AppContext wraps application context with configuration
 type AppContext struct {
 	context.Context
-	Config   *config.Config
-	Location *time.Location
+	Config      *config.Config
+	Location    *time.Location
+	Logger      *zerolog.Logger
+	RequestID   string
+	TenantID    string
+	CurrentUser string
 }
 
 // NewAppContext creates a new application context with configuration
