@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/config"
 	request_id "github.com/protocyber/kelasgo-api/pkg/gin-request-id"
@@ -115,28 +116,28 @@ func CreateServiceContext(ctx context.Context, appCtx *AppContext) context.Conte
 }
 
 // CreateServiceContextFromGin creates a service context from gin context
-func CreateServiceContextFromGin(ginCtx interface{}) context.Context {
+func CreateServiceContextFromGin(ginCtx *gin.Context) context.Context {
 	ctx := context.Background()
 
 	// Extract app context if available
-	if appCtx, exists := extractValue(ginCtx, "app_context"); exists {
+	if appCtx, exists := ginCtx.Get("app_context"); exists {
 		if ac, ok := appCtx.(*AppContext); ok {
 			ctx = WithAppContext(ctx, ac)
 		}
 	}
 
 	// Copy request ID
-	if requestID, exists := extractValue(ginCtx, request_id.XRequestIDKey); exists {
+	if requestID, exists := ginCtx.Get(request_id.XRequestIDKey); exists {
 		ctx = context.WithValue(ctx, request_id.XRequestIDKey, requestID)
 	}
 
 	// Copy tenant ID
-	if tenantID, exists := extractValue(ginCtx, string(XTenantIDKey)); exists {
+	if tenantID, exists := ginCtx.Get(string(XTenantIDKey)); exists {
 		ctx = context.WithValue(ctx, XTenantIDKey, tenantID)
 	}
 
 	// Copy user ID
-	if userID, exists := extractValue(ginCtx, "user_id"); exists {
+	if userID, exists := ginCtx.Get("user_id"); exists {
 		ctx = context.WithValue(ctx, "user_id", userID)
 	}
 
@@ -186,24 +187,4 @@ func GetTenantIDAsUUID(ctx context.Context) (uuid.UUID, bool) {
 	}
 
 	return uuid.Nil, false
-}
-
-// Helper function to extract values from gin context-like interface
-func extractValue(ginCtx interface{}, key string) (interface{}, bool) {
-	if gc, ok := ginCtx.(interface {
-		Get(string) (interface{}, bool)
-	}); ok {
-		return gc.Get(key)
-	}
-	return nil, false
-}
-
-// Backward compatibility - deprecated, use CreateServiceContextFromGin instead
-func CopyContextFromContext(ctx context.Context) context.Context {
-	appCtx, _ := GetAppContextFromContext(ctx)
-	c := WithAppContext(ctx, appCtx)
-	c = context.WithValue(c, request_id.XRequestIDKey, ctx.Value(request_id.XRequestIDKey))
-	c = context.WithValue(c, XTenantIDKey, ctx.Value(XTenantIDKey))
-	c = context.WithValue(c, "user_id", ctx.Value("user_id"))
-	return c
 }

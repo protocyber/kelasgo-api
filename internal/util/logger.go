@@ -49,25 +49,25 @@ func NewContextLogger(c *gin.Context) *ContextLogger {
 }
 
 // NewServiceLogger creates a new context logger from service context
-func NewServiceLogger(ctx context.Context) *ContextLogger {
+func NewServiceLogger(c context.Context) *ContextLogger {
 	logger := &ContextLogger{}
 
 	// Extract request ID from context
-	if requestID := ctx.Value(request_id.XRequestIDKey); requestID != nil {
+	if requestID := c.Value(request_id.XRequestIDKey); requestID != nil {
 		if id, ok := requestID.(string); ok {
 			logger.requestID = id
 		}
 	}
 
 	// Extract tenant ID if available
-	if tenantID := ctx.Value(XTenantIDKey); tenantID != nil {
+	if tenantID := c.Value(XTenantIDKey); tenantID != nil {
 		if id, ok := tenantID.(string); ok {
 			logger.tenantID = id
 		}
 	}
 
 	// Extract user ID if available
-	if userID := ctx.Value("user_id"); userID != nil {
+	if userID := c.Value("user_id"); userID != nil {
 		switch v := userID.(type) {
 		case string:
 			logger.userID = v

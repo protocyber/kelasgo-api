@@ -21,8 +21,8 @@ func SetupRoutes(r *gin.Engine, app *app.App) {
 	)
 
 	// Middleware
-	r.Use(middleware.AppContextMiddleware(cfg))
 	r.Use(request_id.RequestID(nil))
+	r.Use(middleware.AppContextMiddleware(cfg))
 	r.Use(middleware.CORSMiddleware(cfg.App.CORS))
 	// Note: TenantMiddleware is now optional and applied per route group as needed
 
