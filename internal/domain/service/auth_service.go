@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 
 	"github.com/google/uuid"
@@ -8,17 +9,16 @@ import (
 	"github.com/protocyber/kelasgo-api/internal/domain/model"
 	"github.com/protocyber/kelasgo-api/internal/domain/repository"
 	"github.com/protocyber/kelasgo-api/internal/util"
-	"github.com/rs/zerolog/log"
 )
 
 // AuthService interface defines authentication service methods
 type AuthService interface {
-	Login(req dto.LoginRequest) (*dto.LoginResponse, error)
-	Register(req dto.RegisterRequest) (*model.User, error)
-	SelectTenant(userID uuid.UUID, req dto.TenantSelectionRequest) (*dto.TenantSelectionResponse, error)
-	GetUserTenants(userID uuid.UUID) ([]model.TenantUser, error)
-	ChangePassword(userID uuid.UUID, req dto.ChangePasswordRequest) error
-	ValidateToken(token string) (*dto.TokenClaims, error)
+	Login(c context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
+	Register(c context.Context, req dto.RegisterRequest) (*model.User, error)
+	SelectTenant(c context.Context, userID uuid.UUID, req dto.TenantSelectionRequest) (*dto.TenantSelectionResponse, error)
+	GetUserTenants(c context.Context, userID uuid.UUID) ([]model.TenantUser, error)
+	ChangePassword(c context.Context, userID uuid.UUID, req dto.ChangePasswordRequest) error
+	ValidateToken(c context.Context, token string) (*dto.TokenClaims, error)
 }
 
 // authService implements AuthService
@@ -47,11 +47,14 @@ func NewAuthService(
 	}
 }
 
-func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
+func (s *authService) Login(c context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Get user by email globally (no tenant context needed)
-	user, err := s.userRepo.GetByEmailGlobal(req.Email)
+	user, err := s.userRepo.GetByEmailGlobal(c, req.Email)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("email", req.Email).
 			Msg("User not found during login attempt")
@@ -60,7 +63,7 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 
 	// Check if user is active
 	if !user.IsActive {
-		log.Warn().
+		logger.Warn().
 			Str("user_id", user.ID.String()).
 			Str("email", req.Email).
 			Msg("Login attempt for deactivated user")
@@ -69,7 +72,7 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 
 	// Check password
 	if !util.CheckPassword(req.Password, user.PasswordHash) {
-		log.Warn().
+		logger.Warn().
 			Str("user_id", user.ID.String()).
 			Str("email", req.Email).
 			Msg("Invalid password during login attempt")
@@ -85,7 +88,7 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 		"", // No role yet
 	)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", user.ID.String()).
 			Str("email", req.Email).
@@ -111,20 +114,23 @@ func (s *authService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 	}, nil
 }
 
-func (s *authService) Register(req dto.RegisterRequest) (*model.User, error) {
+func (s *authService) Register(c context.Context, req dto.RegisterRequest) (*model.User, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Check if username already exists globally
-	existingUser, _ := s.userRepo.GetByUsername(req.Username)
+	existingUser, _ := s.userRepo.GetByUsername(c, req.Username)
 	if existingUser != nil {
-		log.Warn().
+		logger.Warn().
 			Str("username", req.Username).
 			Msg("Registration attempt with existing username")
 		return nil, errors.New("username already exists")
 	}
 
 	// Check if email already exists globally
-	existingUser, _ = s.userRepo.GetByEmailGlobal(req.Email)
+	existingUser, _ = s.userRepo.GetByEmailGlobal(c, req.Email)
 	if existingUser != nil {
-		log.Warn().
+		logger.Warn().
 			Str("email", req.Email).
 			Msg("Registration attempt with existing email")
 		return nil, errors.New("email already exists")
@@ -133,7 +139,7 @@ func (s *authService) Register(req dto.RegisterRequest) (*model.User, error) {
 	// Hash password
 	hashedPassword, err := util.HashPassword(req.Password)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("email", req.Email).
 			Msg("Failed to hash password during registration")
@@ -150,9 +156,9 @@ func (s *authService) Register(req dto.RegisterRequest) (*model.User, error) {
 		IsActive:     true,
 	}
 
-	err = s.userRepo.Create(user)
+	err = s.userRepo.Create(c, user)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("email", req.Email).
 			Str("username", req.Username).
@@ -163,11 +169,14 @@ func (s *authService) Register(req dto.RegisterRequest) (*model.User, error) {
 	return user, nil
 }
 
-func (s *authService) SelectTenant(userID uuid.UUID, req dto.TenantSelectionRequest) (*dto.TenantSelectionResponse, error) {
+func (s *authService) SelectTenant(c context.Context, userID uuid.UUID, req dto.TenantSelectionRequest) (*dto.TenantSelectionResponse, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Parse tenant ID
 	tenantID, err := uuid.Parse(req.TenantID)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("tenant_id", req.TenantID).
 			Str("user_id", userID.String()).
@@ -176,9 +185,9 @@ func (s *authService) SelectTenant(userID uuid.UUID, req dto.TenantSelectionRequ
 	}
 
 	// Get user
-	user, err := s.userRepo.GetByID(userID)
+	user, err := s.userRepo.GetByID(c, userID)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", userID.String()).
 			Msg("User not found during tenant selection")
@@ -186,9 +195,9 @@ func (s *authService) SelectTenant(userID uuid.UUID, req dto.TenantSelectionRequ
 	}
 
 	// Check if user belongs to this tenant
-	tenantUser, err := s.tenantUserRepo.GetByTenantAndUser(tenantID, userID)
+	tenantUser, err := s.tenantUserRepo.GetByTenantAndUser(c, tenantID, userID)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", userID.String()).
 			Str("tenant_id", tenantID.String()).
@@ -198,7 +207,7 @@ func (s *authService) SelectTenant(userID uuid.UUID, req dto.TenantSelectionRequ
 
 	// Get role name from TenantUserRoles
 	roleName := ""
-	tenantUserRoles, err := s.tenantUserRoleRepo.GetRolesByTenantUser(tenantUser.ID)
+	tenantUserRoles, err := s.tenantUserRoleRepo.GetRolesByTenantUser(c, tenantUser.ID)
 	if err == nil && len(tenantUserRoles) > 0 && tenantUserRoles[0].Role != nil {
 		roleName = tenantUserRoles[0].Role.Name
 	}
@@ -212,7 +221,7 @@ func (s *authService) SelectTenant(userID uuid.UUID, req dto.TenantSelectionRequ
 		roleName,
 	)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", user.ID.String()).
 			Str("tenant_id", tenantID.String()).
@@ -238,10 +247,13 @@ func (s *authService) SelectTenant(userID uuid.UUID, req dto.TenantSelectionRequ
 	}, nil
 }
 
-func (s *authService) GetUserTenants(userID uuid.UUID) ([]model.TenantUser, error) {
-	tenantUsers, err := s.userRepo.GetUserTenants(userID)
+func (s *authService) GetUserTenants(c context.Context, userID uuid.UUID) ([]model.TenantUser, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
+	tenantUsers, err := s.userRepo.GetUserTenants(c, userID)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", userID.String()).
 			Msg("Failed to get user tenants")
@@ -250,11 +262,14 @@ func (s *authService) GetUserTenants(userID uuid.UUID) ([]model.TenantUser, erro
 	return tenantUsers, nil
 }
 
-func (s *authService) ChangePassword(userID uuid.UUID, req dto.ChangePasswordRequest) error {
+func (s *authService) ChangePassword(c context.Context, userID uuid.UUID, req dto.ChangePasswordRequest) error {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Get user
-	user, err := s.userRepo.GetByID(userID)
+	user, err := s.userRepo.GetByID(c, userID)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", userID.String()).
 			Msg("User not found during password change")
@@ -263,7 +278,7 @@ func (s *authService) ChangePassword(userID uuid.UUID, req dto.ChangePasswordReq
 
 	// Check current password
 	if !util.CheckPassword(req.CurrentPassword, user.PasswordHash) {
-		log.Warn().
+		logger.Warn().
 			Str("user_id", userID.String()).
 			Str("username", user.Username).
 			Msg("Incorrect current password during password change")
@@ -273,7 +288,7 @@ func (s *authService) ChangePassword(userID uuid.UUID, req dto.ChangePasswordReq
 	// Hash new password
 	hashedPassword, err := util.HashPassword(req.NewPassword)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", userID.String()).
 			Msg("Failed to hash new password during password change")
@@ -283,9 +298,9 @@ func (s *authService) ChangePassword(userID uuid.UUID, req dto.ChangePasswordReq
 	// Update password
 	user.PasswordHash = hashedPassword
 
-	err = s.userRepo.Update(user)
+	err = s.userRepo.Update(c, user)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", userID.String()).
 			Msg("Failed to update password in database")
@@ -295,11 +310,14 @@ func (s *authService) ChangePassword(userID uuid.UUID, req dto.ChangePasswordReq
 	return nil
 }
 
-func (s *authService) ValidateToken(token string) (*dto.TokenClaims, error) {
+func (s *authService) ValidateToken(c context.Context, token string) (*dto.TokenClaims, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Validate JWT token using JWT service
 	claims, err := s.jwtService.ValidateToken(token)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Token validation failed")
 		return nil, errors.New("invalid token")

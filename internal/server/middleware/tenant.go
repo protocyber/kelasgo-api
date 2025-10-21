@@ -7,13 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/infrastructure/database"
+	"github.com/protocyber/kelasgo-api/internal/util"
 	"github.com/rs/zerolog/log"
 )
-
-// TenantContextKey is the key used to store tenant ID in context
-type TenantContextKey string
-
-const TenantIDKey TenantContextKey = "tenant_id"
 
 // TenantMiddleware extracts tenant ID from various sources and adds it to context
 // It also sets the PostgreSQL session variable for Row Level Security
@@ -28,22 +24,22 @@ func TenantMiddleware(db *database.DatabaseConnections) gin.HandlerFunc {
 		// 3. Subdomain (for subdomain-based tenancy)
 
 		// 1. Check header
-		tenantIDStr := c.GetHeader("X-Tenant-ID")
+		tenantIDStr := c.GetHeader(string(util.XTenantIDKey))
 
 		// 2. Check query parameter if header is empty
 		if tenantIDStr == "" {
-			tenantIDStr = c.Query("tenant_id")
+			tenantIDStr = c.Query(string(util.TenantIDRequestKey))
 		}
 
 		// 3. Extract from subdomain if still empty
-		if tenantIDStr == "" {
-			host := c.Request.Host
-			// Example: tenant.example.com -> tenant
-			// This is a basic implementation, adjust based on your domain structure
-			if subdomain := extractSubdomain(host); subdomain != "" && subdomain != "www" && subdomain != "api" {
-				tenantIDStr = subdomain
-			}
-		}
+		// if tenantIDStr == "" {
+		// 	host := c.Request.Host
+		// 	// Example: tenant.example.com -> tenant
+		// 	// This is a basic implementation, adjust based on your domain structure
+		// 	if subdomain := extractSubdomain(host); subdomain != "" && subdomain != "www" && subdomain != "api" {
+		// 		tenantIDStr = subdomain
+		// 	}
+		// }
 
 		// Parse tenant ID if found
 		if tenantIDStr != "" {
@@ -89,11 +85,11 @@ func TenantMiddleware(db *database.DatabaseConnections) gin.HandlerFunc {
 		}
 
 		// Add tenant ID to context (even if empty - some operations might not require tenant)
-		ctx := context.WithValue(c.Request.Context(), TenantIDKey, tenantID)
+		ctx := context.WithValue(c.Request.Context(), util.XTenantIDKey, tenantID)
 		c.Request = c.Request.WithContext(ctx)
 
 		// Also set in Gin context for easier access
-		c.Set(string(TenantIDKey), tenantID)
+		c.Set(string(util.XTenantIDKey), tenantID)
 
 		c.Next()
 	}
@@ -102,7 +98,7 @@ func TenantMiddleware(db *database.DatabaseConnections) gin.HandlerFunc {
 // RequireTenant is a middleware that ensures a tenant ID is present
 func RequireTenant() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tenantID, exists := c.Get(string(TenantIDKey))
+		tenantID, exists := c.Get(string(util.XTenantIDKey))
 		if !exists || tenantID == nil || tenantID == uuid.Nil {
 			log.Warn().
 				Str("remote_ip", c.ClientIP()).
@@ -125,7 +121,7 @@ func RequireTenant() gin.HandlerFunc {
 
 // GetTenantID extracts tenant ID from Gin context
 func GetTenantID(c *gin.Context) uuid.UUID {
-	if tenantID, exists := c.Get(string(TenantIDKey)); exists && tenantID != nil {
+	if tenantID, exists := c.Get(string(util.XTenantIDKey)); exists && tenantID != nil {
 		if tid, ok := tenantID.(uuid.UUID); ok {
 			return tid
 		}
@@ -135,7 +131,7 @@ func GetTenantID(c *gin.Context) uuid.UUID {
 
 // GetTenantIDFromContext extracts tenant ID from standard context
 func GetTenantIDFromContext(ctx context.Context) uuid.UUID {
-	if tenantID, ok := ctx.Value(TenantIDKey).(uuid.UUID); ok {
+	if tenantID, ok := ctx.Value(util.XTenantIDKey).(uuid.UUID); ok {
 		return tenantID
 	}
 	return uuid.Nil
@@ -143,27 +139,27 @@ func GetTenantIDFromContext(ctx context.Context) uuid.UUID {
 
 // extractSubdomain extracts subdomain from host
 // This is a basic implementation - adjust based on your domain structure
-func extractSubdomain(host string) string {
-	// Remove port if present
-	if colonIndex := len(host) - 1; colonIndex > 0 {
-		for i := len(host) - 1; i >= 0; i-- {
-			if host[i] == ':' {
-				host = host[:i]
-				break
-			}
-		}
-	}
+// func extractSubdomain(host string) string {
+// 	// Remove port if present
+// 	if colonIndex := len(host) - 1; colonIndex > 0 {
+// 		for i := len(host) - 1; i >= 0; i-- {
+// 			if host[i] == ':' {
+// 				host = host[:i]
+// 				break
+// 			}
+// 		}
+// 	}
 
-	// Split by dots and get the first part
-	for i := 0; i < len(host); i++ {
-		if host[i] == '.' {
-			return host[:i]
-		}
-	}
+// 	// Split by dots and get the first part
+// 	for i := 0; i < len(host); i++ {
+// 		if host[i] == '.' {
+// 			return host[:i]
+// 		}
+// 	}
 
-	// No subdomain found
-	return ""
-}
+// 	// No subdomain found
+// 	return ""
+// }
 
 // setTenantContext sets the PostgreSQL session variable for Row Level Security
 func setTenantContext(db *database.DatabaseConnections, tenantID uuid.UUID) error {

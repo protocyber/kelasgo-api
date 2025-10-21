@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"math"
 
@@ -8,19 +9,19 @@ import (
 	"github.com/protocyber/kelasgo-api/internal/domain/dto"
 	"github.com/protocyber/kelasgo-api/internal/domain/model"
 	"github.com/protocyber/kelasgo-api/internal/domain/repository"
-	"github.com/rs/zerolog/log"
+	"github.com/protocyber/kelasgo-api/internal/util"
 )
 
 // StudentService interface defines student service methods
 type StudentService interface {
-	Create(tenantID uuid.UUID, req dto.CreateStudentRequest) (*model.Student, error)
-	GetByID(id uuid.UUID) (*model.Student, error)
-	Update(id uuid.UUID, req dto.UpdateStudentRequest) (*model.Student, error)
-	Delete(id uuid.UUID) error
-	BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error
-	List(tenantID uuid.UUID, params dto.StudentQueryParams) ([]model.Student, *dto.PaginationMeta, error)
-	GetByClass(tenantID, classID uuid.UUID, params dto.QueryParams) ([]model.Student, *dto.PaginationMeta, error)
-	GetByParent(tenantID, parentID uuid.UUID, params dto.QueryParams) ([]model.Student, *dto.PaginationMeta, error)
+	Create(c context.Context, tenantID uuid.UUID, req dto.CreateStudentRequest) (*model.Student, error)
+	GetByID(c context.Context, id uuid.UUID) (*model.Student, error)
+	Update(c context.Context, id uuid.UUID, req dto.UpdateStudentRequest) (*model.Student, error)
+	Delete(c context.Context, id uuid.UUID) error
+	BulkDelete(c context.Context, tenantID uuid.UUID, ids []uuid.UUID) error
+	List(c context.Context, tenantID uuid.UUID, params dto.StudentQueryParams) ([]model.Student, *dto.PaginationMeta, error)
+	GetByClass(c context.Context, tenantID, classID uuid.UUID, params dto.QueryParams) ([]model.Student, *dto.PaginationMeta, error)
+	GetByParent(c context.Context, tenantID, parentID uuid.UUID, params dto.QueryParams) ([]model.Student, *dto.PaginationMeta, error)
 }
 
 // studentService implements StudentService
@@ -40,11 +41,14 @@ func NewStudentService(
 	}
 }
 
-func (s *studentService) Create(tenantID uuid.UUID, req dto.CreateStudentRequest) (*model.Student, error) {
+func (s *studentService) Create(c context.Context, tenantID uuid.UUID, req dto.CreateStudentRequest) (*model.Student, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Check if tenant user exists
-	tenantUser, err := s.tenantUserRepo.GetByID(req.TenantUserID)
+	tenantUser, err := s.tenantUserRepo.GetByID(c, req.TenantUserID)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("tenant_user_id", req.TenantUserID.String()).
 			Str("tenant_id", tenantID.String()).
@@ -54,7 +58,7 @@ func (s *studentService) Create(tenantID uuid.UUID, req dto.CreateStudentRequest
 
 	// Verify tenant user belongs to the correct tenant
 	if tenantUser.TenantID != tenantID {
-		log.Warn().
+		logger.Warn().
 			Str("tenant_user_id", req.TenantUserID.String()).
 			Str("expected_tenant", tenantID.String()).
 			Str("actual_tenant", tenantUser.TenantID.String()).
@@ -63,9 +67,9 @@ func (s *studentService) Create(tenantID uuid.UUID, req dto.CreateStudentRequest
 	}
 
 	// Check if student number already exists within tenant
-	existingStudent, _ := s.studentRepo.GetByStudentNumber(req.StudentNumber, tenantID)
+	existingStudent, _ := s.studentRepo.GetByStudentNumber(c, req.StudentNumber, tenantID)
 	if existingStudent != nil {
-		log.Warn().
+		logger.Warn().
 			Str("student_number", req.StudentNumber).
 			Str("tenant_id", tenantID.String()).
 			Msg("Student creation attempt with existing student number")
@@ -82,9 +86,9 @@ func (s *studentService) Create(tenantID uuid.UUID, req dto.CreateStudentRequest
 		ParentID:      req.ParentID,
 	}
 
-	err = s.studentRepo.Create(student)
+	err = s.studentRepo.Create(c, student)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("student_number", req.StudentNumber).
 			Str("tenant_id", tenantID.String()).
@@ -95,23 +99,29 @@ func (s *studentService) Create(tenantID uuid.UUID, req dto.CreateStudentRequest
 	return student, nil
 }
 
-func (s *studentService) GetByID(id uuid.UUID) (*model.Student, error) {
-	student, err := s.studentRepo.GetByID(id)
+func (s *studentService) GetByID(c context.Context, id uuid.UUID) (*model.Student, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
+	student, err := s.studentRepo.GetByID(c, id)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("student_id", id.String()).
 			Msg("Failed to get student by ID")
-		return nil, err
+		return nil, errors.New("student not found")
 	}
 	return student, nil
 }
 
-func (s *studentService) Update(id uuid.UUID, req dto.UpdateStudentRequest) (*model.Student, error) {
+func (s *studentService) Update(c context.Context, id uuid.UUID, req dto.UpdateStudentRequest) (*model.Student, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Get existing student
-	student, err := s.studentRepo.GetByID(id)
+	student, err := s.studentRepo.GetByID(c, id)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("student_id", id.String()).
 			Msg("Student not found during update")
@@ -120,9 +130,9 @@ func (s *studentService) Update(id uuid.UUID, req dto.UpdateStudentRequest) (*mo
 
 	// Check if student number already exists (if changed and provided)
 	if req.StudentNumber != nil && *req.StudentNumber != "" && *req.StudentNumber != student.StudentNumber {
-		existingStudent, _ := s.studentRepo.GetByStudentNumber(*req.StudentNumber, student.TenantID)
+		existingStudent, _ := s.studentRepo.GetByStudentNumber(c, *req.StudentNumber, student.TenantID)
 		if existingStudent != nil && existingStudent.ID != id {
-			log.Warn().
+			logger.Warn().
 				Str("student_number", *req.StudentNumber).
 				Str("student_id", id.String()).
 				Str("tenant_id", student.TenantID.String()).
@@ -145,9 +155,9 @@ func (s *studentService) Update(id uuid.UUID, req dto.UpdateStudentRequest) (*mo
 		student.ParentID = req.ParentID
 	}
 
-	err = s.studentRepo.Update(student)
+	err = s.studentRepo.Update(c, student)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("student_id", id.String()).
 			Msg("Failed to update student in database")
@@ -157,20 +167,23 @@ func (s *studentService) Update(id uuid.UUID, req dto.UpdateStudentRequest) (*mo
 	return student, nil
 }
 
-func (s *studentService) Delete(id uuid.UUID) error {
+func (s *studentService) Delete(c context.Context, id uuid.UUID) error {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Check if student exists
-	_, err := s.studentRepo.GetByID(id)
+	_, err := s.studentRepo.GetByID(c, id)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("student_id", id.String()).
 			Msg("Student not found during delete")
 		return err
 	}
 
-	err = s.studentRepo.Delete(id)
+	err = s.studentRepo.Delete(c, id)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("student_id", id.String()).
 			Msg("Failed to delete student from database")
@@ -180,15 +193,18 @@ func (s *studentService) Delete(id uuid.UUID) error {
 	return nil
 }
 
-func (s *studentService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
+func (s *studentService) BulkDelete(c context.Context, tenantID uuid.UUID, ids []uuid.UUID) error {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	if len(ids) == 0 {
 		return errors.New("no student IDs provided for bulk delete")
 	}
 
 	// Get students that belong to the tenant to validate they exist and log properly
-	students, _, err := s.studentRepo.List(tenantID, 0, len(ids)*2, "")
+	students, _, err := s.studentRepo.List(c, tenantID, 0, len(ids)*2, "")
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("tenant_id", tenantID.String()).
 			Interface("student_ids", ids).
@@ -214,7 +230,7 @@ func (s *studentService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
 	}
 
 	if len(invalidIDs) > 0 {
-		log.Warn().
+		logger.Warn().
 			Str("tenant_id", tenantID.String()).
 			Interface("invalid_ids", invalidIDs).
 			Msg("Some student IDs do not belong to the tenant or do not exist")
@@ -225,9 +241,9 @@ func (s *studentService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
 	}
 
 	// Perform bulk delete
-	err = s.studentRepo.BulkDelete(validIDs)
+	err = s.studentRepo.BulkDelete(c, validIDs)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("tenant_id", tenantID.String()).
 			Interface("student_ids", validIDs).
@@ -238,7 +254,10 @@ func (s *studentService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
 	return nil
 }
 
-func (s *studentService) List(tenantID uuid.UUID, params dto.StudentQueryParams) ([]model.Student, *dto.PaginationMeta, error) {
+func (s *studentService) List(c context.Context, tenantID uuid.UUID, params dto.StudentQueryParams) ([]model.Student, *dto.PaginationMeta, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Set defaults
 	if params.Page < 1 {
 		params.Page = 1
@@ -254,9 +273,9 @@ func (s *studentService) List(tenantID uuid.UUID, params dto.StudentQueryParams)
 	var err error
 
 	if params.ClassID != nil {
-		students, total, err = s.studentRepo.GetByClass(tenantID, *params.ClassID, offset, params.Limit)
+		students, total, err = s.studentRepo.GetByClass(c, tenantID, *params.ClassID, offset, params.Limit)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("tenant_id", tenantID.String()).
 				Str("class_id", params.ClassID.String()).
@@ -264,9 +283,9 @@ func (s *studentService) List(tenantID uuid.UUID, params dto.StudentQueryParams)
 				Msg("Failed to get students by class")
 		}
 	} else if params.ParentID != nil {
-		students, total, err = s.studentRepo.GetByParent(tenantID, *params.ParentID, offset, params.Limit)
+		students, total, err = s.studentRepo.GetByParent(c, tenantID, *params.ParentID, offset, params.Limit)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("tenant_id", tenantID.String()).
 				Str("parent_id", params.ParentID.String()).
@@ -274,9 +293,9 @@ func (s *studentService) List(tenantID uuid.UUID, params dto.StudentQueryParams)
 				Msg("Failed to get students by parent")
 		}
 	} else {
-		students, total, err = s.studentRepo.List(tenantID, offset, params.Limit, params.Search)
+		students, total, err = s.studentRepo.List(c, tenantID, offset, params.Limit, params.Search)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("tenant_id", tenantID.String()).
 				Interface("params", params).
@@ -300,7 +319,10 @@ func (s *studentService) List(tenantID uuid.UUID, params dto.StudentQueryParams)
 	return students, meta, nil
 }
 
-func (s *studentService) GetByClass(tenantID, classID uuid.UUID, params dto.QueryParams) ([]model.Student, *dto.PaginationMeta, error) {
+func (s *studentService) GetByClass(c context.Context, tenantID, classID uuid.UUID, params dto.QueryParams) ([]model.Student, *dto.PaginationMeta, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Set defaults
 	if params.Page < 1 {
 		params.Page = 1
@@ -311,9 +333,9 @@ func (s *studentService) GetByClass(tenantID, classID uuid.UUID, params dto.Quer
 
 	offset := (params.Page - 1) * params.Limit
 
-	students, total, err := s.studentRepo.GetByClass(tenantID, classID, offset, params.Limit)
+	students, total, err := s.studentRepo.GetByClass(c, tenantID, classID, offset, params.Limit)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("tenant_id", tenantID.String()).
 			Str("class_id", classID.String()).
@@ -334,7 +356,10 @@ func (s *studentService) GetByClass(tenantID, classID uuid.UUID, params dto.Quer
 	return students, meta, nil
 }
 
-func (s *studentService) GetByParent(tenantID, parentID uuid.UUID, params dto.QueryParams) ([]model.Student, *dto.PaginationMeta, error) {
+func (s *studentService) GetByParent(c context.Context, tenantID, parentID uuid.UUID, params dto.QueryParams) ([]model.Student, *dto.PaginationMeta, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Set defaults
 	if params.Page < 1 {
 		params.Page = 1
@@ -345,9 +370,9 @@ func (s *studentService) GetByParent(tenantID, parentID uuid.UUID, params dto.Qu
 
 	offset := (params.Page - 1) * params.Limit
 
-	students, total, err := s.studentRepo.GetByParent(tenantID, parentID, offset, params.Limit)
+	students, total, err := s.studentRepo.GetByParent(c, tenantID, parentID, offset, params.Limit)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("tenant_id", tenantID.String()).
 			Str("parent_id", parentID.String()).

@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/protocyber/kelasgo-api/internal/app"
 	"github.com/protocyber/kelasgo-api/internal/server/middleware"
+	request_id "github.com/protocyber/kelasgo-api/pkg/gin-request-id"
 )
 
 // SetupRoutes configures all API routes
@@ -20,9 +21,8 @@ func SetupRoutes(r *gin.Engine, app *app.App) {
 	)
 
 	// Middleware
-	r.Use(middleware.RequestID()) // Add request ID middleware first
-	r.Use(middleware.RequestLogger(cfg))
-	r.Use(middleware.AppContextMiddleware(cfg)) // Add app context middleware
+	r.Use(middleware.AppContextMiddleware(cfg))
+	r.Use(request_id.RequestID(nil))
 	r.Use(middleware.CORSMiddleware(cfg.App.CORS))
 	// Note: TenantMiddleware is now optional and applied per route group as needed
 

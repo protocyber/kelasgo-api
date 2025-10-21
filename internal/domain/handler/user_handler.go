@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/domain/dto"
 	"github.com/protocyber/kelasgo-api/internal/domain/service"
-	"github.com/protocyber/kelasgo-api/internal/server/middleware"
+	"github.com/protocyber/kelasgo-api/internal/util"
 )
 
 // UserHandler handles user related requests
@@ -19,8 +19,9 @@ type UserHandler struct {
 }
 
 // NewUserHandler creates a new user handler
-func NewUserHandler(userService service.UserService, validator *validator.Validate) *UserHandler {
+func NewUserHandler(userService service.UserService, validator *validator.Validate, appCtx *util.AppContext) *UserHandler {
 	return &UserHandler{
+		BaseHandler: NewBaseHandler(appCtx),
 		userService: userService,
 		validator:   validator,
 	}
@@ -28,11 +29,11 @@ func NewUserHandler(userService service.UserService, validator *validator.Valida
 
 // Create handles user creation
 func (h *UserHandler) Create(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	var req dto.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Failed to bind create user request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -44,7 +45,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Str("username", req.Username).
 			Str("email", req.Email).
@@ -57,10 +58,10 @@ func (h *UserHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Get tenant ID from middleware context
-	tenantID := middleware.GetTenantID(c)
-	if tenantID == uuid.Nil {
-		h.log.Error().
+	// Get tenant ID from helper method
+	tenantID, exists := h.GetTenantIDAsUUID(c)
+	if !exists {
+		logger.Error().
 			Str("username", req.Username).
 			Msg("User creation attempt without valid tenant ID")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -71,7 +72,8 @@ func (h *UserHandler) Create(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.Create(tenantID, req)
+	serviceCtx := h.CreateServiceContext(c)
+	user, err := h.userService.Create(serviceCtx, tenantID, req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -90,12 +92,12 @@ func (h *UserHandler) Create(c *gin.Context) {
 
 // GetByID handles getting user by ID
 func (h *UserHandler) GetByID(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("id_param", idStr).
 			Msg("Invalid user ID format in get request")
@@ -107,7 +109,8 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.GetByID(id)
+	serviceCtx := h.CreateServiceContext(c)
+	user, err := h.userService.GetByID(serviceCtx, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, dto.Response{
 			Success: false,
@@ -126,12 +129,12 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 
 // Update handles user update
 func (h *UserHandler) Update(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("id_param", idStr).
 			Msg("Invalid user ID format in update request")
@@ -145,7 +148,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 	var req dto.UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", id.String()).
 			Msg("Failed to bind update user request JSON")
@@ -158,7 +161,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Str("user_id", id.String()).
 			Msg("Update user request validation failed")
@@ -170,7 +173,8 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.Update(id, req)
+	serviceCtx := h.CreateServiceContext(c)
+	user, err := h.userService.Update(serviceCtx, id, req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -189,12 +193,12 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 // Delete handles user deletion
 func (h *UserHandler) Delete(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("id_param", idStr).
 			Msg("Invalid user ID format in delete request")
@@ -206,7 +210,8 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	err = h.userService.Delete(id)
+	serviceCtx := h.CreateServiceContext(c)
+	err = h.userService.Delete(serviceCtx, id)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -224,11 +229,11 @@ func (h *UserHandler) Delete(c *gin.Context) {
 
 // BulkDelete handles bulk user deletion
 func (h *UserHandler) BulkDelete(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	var req dto.BulkDeleteUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Failed to bind bulk delete user request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -240,7 +245,7 @@ func (h *UserHandler) BulkDelete(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Interface("user_ids", req.IDs).
 			Msg("Bulk delete user request validation failed")
@@ -252,10 +257,10 @@ func (h *UserHandler) BulkDelete(c *gin.Context) {
 		return
 	}
 
-	// Get tenant ID from middleware context
-	tenantID := middleware.GetTenantID(c)
-	if tenantID == uuid.Nil {
-		h.log.Error().
+	// Get tenant ID from helper method
+	tenantID, exists := h.GetTenantIDAsUUID(c)
+	if !exists {
+		logger.Error().
 			Interface("user_ids", req.IDs).
 			Msg("Bulk delete users attempt without valid tenant ID")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -266,7 +271,8 @@ func (h *UserHandler) BulkDelete(c *gin.Context) {
 		return
 	}
 
-	err := h.userService.BulkDelete(tenantID, req.IDs)
+	serviceCtx := h.CreateServiceContext(c)
+	err := h.userService.BulkDelete(serviceCtx, tenantID, req.IDs)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -284,11 +290,11 @@ func (h *UserHandler) BulkDelete(c *gin.Context) {
 
 // List handles user listing with pagination
 func (h *UserHandler) List(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	var params dto.UserQueryParams
 	if err := c.ShouldBindQuery(&params); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Failed to bind user list query parameters")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -300,7 +306,7 @@ func (h *UserHandler) List(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(params); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Interface("params", params).
 			Msg("User list query parameters validation failed")
@@ -312,10 +318,10 @@ func (h *UserHandler) List(c *gin.Context) {
 		return
 	}
 
-	// Get tenant ID from middleware context
-	tenantID := middleware.GetTenantID(c)
-	if tenantID == uuid.Nil {
-		h.log.Error().
+	// Get tenant ID from helper method
+	tenantID, exists := h.GetTenantIDAsUUID(c)
+	if !exists {
+		logger.Error().
 			Msg("User listing attempt without valid tenant ID")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -325,7 +331,8 @@ func (h *UserHandler) List(c *gin.Context) {
 		return
 	}
 
-	users, meta, err := h.userService.List(tenantID, params)
+	serviceCtx := h.CreateServiceContext(c)
+	users, meta, err := h.userService.List(serviceCtx, tenantID, params)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Response{
 			Success: false,

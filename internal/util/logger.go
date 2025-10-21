@@ -1,7 +1,11 @@
 package util
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	request_id "github.com/protocyber/kelasgo-api/pkg/gin-request-id"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -18,14 +22,14 @@ func NewContextLogger(c *gin.Context) *ContextLogger {
 	logger := &ContextLogger{}
 
 	// Extract request ID from context
-	if requestID, exists := c.Get(RequestIDKey); exists {
+	if requestID, exists := c.Get(request_id.XRequestIDKey); exists {
 		if id, ok := requestID.(string); ok {
 			logger.requestID = id
 		}
 	}
 
 	// Extract tenant ID if available
-	if tenantID, exists := c.Get("tenant_id"); exists {
+	if tenantID, exists := c.Get(string(XTenantIDKey)); exists {
 		if id, ok := tenantID.(string); ok {
 			logger.tenantID = id
 		}
@@ -33,19 +37,46 @@ func NewContextLogger(c *gin.Context) *ContextLogger {
 
 	// Extract user ID if available
 	if userID, exists := c.Get("user_id"); exists {
-		if id, ok := userID.(string); ok {
-			logger.userID = id
+		switch v := userID.(type) {
+		case string:
+			logger.userID = v
+		case uuid.UUID:
+			logger.userID = v.String()
 		}
 	}
 
 	return logger
 }
 
-// NewContextLoggerWithRequestID creates a logger with just request ID (for service layer)
-func NewContextLoggerWithRequestID(requestID string) *ContextLogger {
-	return &ContextLogger{
-		requestID: requestID,
+// NewServiceLogger creates a new context logger from service context
+func NewServiceLogger(ctx context.Context) *ContextLogger {
+	logger := &ContextLogger{}
+
+	// Extract request ID from context
+	if requestID := ctx.Value(request_id.XRequestIDKey); requestID != nil {
+		if id, ok := requestID.(string); ok {
+			logger.requestID = id
+		}
 	}
+
+	// Extract tenant ID if available
+	if tenantID := ctx.Value(XTenantIDKey); tenantID != nil {
+		if id, ok := tenantID.(string); ok {
+			logger.tenantID = id
+		}
+	}
+
+	// Extract user ID if available
+	if userID := ctx.Value("user_id"); userID != nil {
+		switch v := userID.(type) {
+		case string:
+			logger.userID = v
+		case uuid.UUID:
+			logger.userID = v.String()
+		}
+	}
+
+	return logger
 }
 
 // WithTenantID adds tenant ID to the logger context
@@ -132,14 +163,4 @@ func logEvent(event *zerolog.Event, fields map[string]interface{}) *zerolog.Even
 		}
 	}
 	return event
-}
-
-// GetRequestIDFromContext extracts request ID from gin context
-func GetRequestIDFromContext(c *gin.Context) string {
-	if requestID, exists := c.Get(RequestIDKey); exists {
-		if id, ok := requestID.(string); ok {
-			return id
-		}
-	}
-	return ""
 }

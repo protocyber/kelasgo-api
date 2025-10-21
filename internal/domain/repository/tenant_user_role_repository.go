@@ -1,23 +1,23 @@
 package repository
 
 import (
+	"context"
 	"errors"
 
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/domain/model"
 	"github.com/protocyber/kelasgo-api/internal/infrastructure/database"
-	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
 // TenantUserRoleRepository interface defines tenant user role repository methods
 type TenantUserRoleRepository interface {
-	Create(tenantUserRole *model.TenantUserRole) error
-	GetByTenantUserAndRole(tenantUserID, roleID uuid.UUID) (*model.TenantUserRole, error)
-	GetRolesByTenantUser(tenantUserID uuid.UUID) ([]model.TenantUserRole, error)
-	GetTenantUsersByRole(roleID uuid.UUID) ([]model.TenantUserRole, error)
-	Delete(tenantUserID, roleID uuid.UUID) error
-	DeleteAllTenantUserRoles(tenantUserID uuid.UUID) error
+	Create(c context.Context, tenantUserRole *model.TenantUserRole) error
+	GetByTenantUserAndRole(c context.Context, tenantUserID, roleID uuid.UUID) (*model.TenantUserRole, error)
+	GetRolesByTenantUser(c context.Context, tenantUserID uuid.UUID) ([]model.TenantUserRole, error)
+	GetTenantUsersByRole(c context.Context, roleID uuid.UUID) ([]model.TenantUserRole, error)
+	Delete(c context.Context, tenantUserID, roleID uuid.UUID) error
+	DeleteAllTenantUserRoles(c context.Context, tenantUserID uuid.UUID) error
 }
 
 // tenantUserRoleRepository implements TenantUserRoleRepository
@@ -32,10 +32,11 @@ func NewTenantUserRoleRepository(db *database.DatabaseConnections) TenantUserRol
 	}
 }
 
-func (r *tenantUserRoleRepository) Create(tenantUserRole *model.TenantUserRole) error {
+func (r *tenantUserRoleRepository) Create(c context.Context, tenantUserRole *model.TenantUserRole) error {
+	repoCtx := r.WithContext(c)
 	err := r.db.Write.Create(tenantUserRole).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "create_tenant_user_role").
 			Msg("Database write operation failed")
@@ -43,7 +44,7 @@ func (r *tenantUserRoleRepository) Create(tenantUserRole *model.TenantUserRole) 
 	return err
 }
 
-func (r *tenantUserRoleRepository) GetByTenantUserAndRole(tenantUserID, roleID uuid.UUID) (*model.TenantUserRole, error) {
+func (r *tenantUserRoleRepository) GetByTenantUserAndRole(c context.Context, tenantUserID, roleID uuid.UUID) (*model.TenantUserRole, error) {
 	var tenantUserRole model.TenantUserRole
 	err := r.db.Read.Preload("TenantUser").Preload("Role").
 		Where("tenant_user_id = ? AND role_id = ?", tenantUserID, roleID).First(&tenantUserRole).Error
@@ -56,7 +57,7 @@ func (r *tenantUserRoleRepository) GetByTenantUserAndRole(tenantUserID, roleID u
 	return &tenantUserRole, nil
 }
 
-func (r *tenantUserRoleRepository) GetRolesByTenantUser(tenantUserID uuid.UUID) ([]model.TenantUserRole, error) {
+func (r *tenantUserRoleRepository) GetRolesByTenantUser(c context.Context, tenantUserID uuid.UUID) ([]model.TenantUserRole, error) {
 	var tenantUserRoles []model.TenantUserRole
 	err := r.db.Read.Preload("Role").Where("tenant_user_id = ?", tenantUserID).Find(&tenantUserRoles).Error
 	if err != nil {
@@ -65,7 +66,7 @@ func (r *tenantUserRoleRepository) GetRolesByTenantUser(tenantUserID uuid.UUID) 
 	return tenantUserRoles, nil
 }
 
-func (r *tenantUserRoleRepository) GetTenantUsersByRole(roleID uuid.UUID) ([]model.TenantUserRole, error) {
+func (r *tenantUserRoleRepository) GetTenantUsersByRole(c context.Context, roleID uuid.UUID) ([]model.TenantUserRole, error) {
 	var tenantUserRoles []model.TenantUserRole
 	err := r.db.Read.Preload("TenantUser").Where("role_id = ?", roleID).Find(&tenantUserRoles).Error
 	if err != nil {
@@ -74,14 +75,16 @@ func (r *tenantUserRoleRepository) GetTenantUsersByRole(roleID uuid.UUID) ([]mod
 	return tenantUserRoles, nil
 }
 
-func (r *tenantUserRoleRepository) Delete(tenantUserID, roleID uuid.UUID) error {
+func (r *tenantUserRoleRepository) Delete(c context.Context, tenantUserID, roleID uuid.UUID) error {
+	// repoCtx := r.WithContext(c)
 	return r.db.Write.Where("tenant_user_id = ? AND role_id = ?", tenantUserID, roleID).Delete(&model.TenantUserRole{}).Error
 }
 
-func (r *tenantUserRoleRepository) DeleteAllTenantUserRoles(tenantUserID uuid.UUID) error {
+func (r *tenantUserRoleRepository) DeleteAllTenantUserRoles(c context.Context, tenantUserID uuid.UUID) error {
+	repoCtx := r.WithContext(c)
 	err := r.db.Write.Where("tenant_user_id = ?", tenantUserID).Delete(&model.TenantUserRole{}).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "delete_all_tenant_user_roles").
 			Msg("Database write operation failed")

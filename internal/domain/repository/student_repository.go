@@ -1,27 +1,27 @@
 package repository
 
 import (
+	"context"
 	"errors"
 
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/domain/model"
 	"github.com/protocyber/kelasgo-api/internal/infrastructure/database"
-	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
 // StudentRepository interface defines student repository methods
 type StudentRepository interface {
-	Create(student *model.Student) error
-	GetByID(id uuid.UUID) (*model.Student, error)
-	GetByStudentNumber(studentNumber string, tenantID uuid.UUID) (*model.Student, error)
-	GetByTenantUserID(tenantUserID uuid.UUID) (*model.Student, error)
-	Update(student *model.Student) error
-	Delete(id uuid.UUID) error
-	BulkDelete(ids []uuid.UUID) error
-	List(tenantID uuid.UUID, offset, limit int, search string) ([]model.Student, int64, error)
-	GetByClass(tenantID, classID uuid.UUID, offset, limit int) ([]model.Student, int64, error)
-	GetByParent(tenantID, parentID uuid.UUID, offset, limit int) ([]model.Student, int64, error)
+	Create(c context.Context, student *model.Student) error
+	GetByID(c context.Context, id uuid.UUID) (*model.Student, error)
+	GetByStudentNumber(c context.Context, studentNumber string, tenantID uuid.UUID) (*model.Student, error)
+	GetByTenantUserID(c context.Context, tenantUserID uuid.UUID) (*model.Student, error)
+	Update(c context.Context, student *model.Student) error
+	Delete(c context.Context, id uuid.UUID) error
+	BulkDelete(c context.Context, ids []uuid.UUID) error
+	List(c context.Context, tenantID uuid.UUID, offset, limit int, search string) ([]model.Student, int64, error)
+	GetByClass(c context.Context, tenantID, classID uuid.UUID, offset, limit int) ([]model.Student, int64, error)
+	GetByParent(c context.Context, tenantID, parentID uuid.UUID, offset, limit int) ([]model.Student, int64, error)
 }
 
 // studentRepository implements StudentRepository
@@ -36,13 +36,14 @@ func NewStudentRepository(db *database.DatabaseConnections) StudentRepository {
 	}
 }
 
-func (r *studentRepository) Create(student *model.Student) error {
+func (r *studentRepository) Create(c context.Context, student *model.Student) error {
+	repoCtx := r.WithContext(c)
 	if err := r.SetTenantContext(student.TenantID); err != nil {
 		return err
 	}
 	err := r.db.Write.Create(student).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "create_student").
 			Msg("Database write operation failed")
@@ -50,14 +51,15 @@ func (r *studentRepository) Create(student *model.Student) error {
 	return err
 }
 
-func (r *studentRepository) GetByID(id uuid.UUID) (*model.Student, error) {
+func (r *studentRepository) GetByID(c context.Context, id uuid.UUID) (*model.Student, error) {
+	repoCtx := r.WithContext(c)
 	var student model.Student
 	err := r.db.Read.Preload("TenantUser.User").Preload("Class").Preload("Parent").First(&student, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("student not found")
 		}
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("student_id", id.String()).
 			Msg("Database error while getting student by ID")
@@ -66,7 +68,8 @@ func (r *studentRepository) GetByID(id uuid.UUID) (*model.Student, error) {
 	return &student, nil
 }
 
-func (r *studentRepository) GetByStudentNumber(studentNumber string, tenantID uuid.UUID) (*model.Student, error) {
+func (r *studentRepository) GetByStudentNumber(c context.Context, studentNumber string, tenantID uuid.UUID) (*model.Student, error) {
+	repoCtx := r.WithContext(c)
 	if err := r.SetTenantContext(tenantID); err != nil {
 		return nil, err
 	}
@@ -78,7 +81,7 @@ func (r *studentRepository) GetByStudentNumber(studentNumber string, tenantID uu
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("student not found")
 		}
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "get_student_by_number").
 			Msg("Database query failed")
@@ -87,7 +90,8 @@ func (r *studentRepository) GetByStudentNumber(studentNumber string, tenantID uu
 	return &student, nil
 }
 
-func (r *studentRepository) GetByTenantUserID(tenantUserID uuid.UUID) (*model.Student, error) {
+func (r *studentRepository) GetByTenantUserID(c context.Context, tenantUserID uuid.UUID) (*model.Student, error) {
+	repoCtx := r.WithContext(c)
 	var student model.Student
 	err := r.db.Read.Preload("TenantUser.User").Preload("Class").Preload("Parent").
 		Where("tenant_user_id = ?", tenantUserID).First(&student).Error
@@ -95,7 +99,7 @@ func (r *studentRepository) GetByTenantUserID(tenantUserID uuid.UUID) (*model.St
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("student not found")
 		}
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("tenant_user_id", tenantUserID.String()).
 			Msg("Database error in GetByTenantUserID")
@@ -104,13 +108,14 @@ func (r *studentRepository) GetByTenantUserID(tenantUserID uuid.UUID) (*model.St
 	return &student, nil
 }
 
-func (r *studentRepository) Update(student *model.Student) error {
+func (r *studentRepository) Update(c context.Context, student *model.Student) error {
+	repoCtx := r.WithContext(c)
 	if err := r.SetTenantContext(student.TenantID); err != nil {
 		return err
 	}
 	err := r.db.Write.Save(student).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "update_student").
 			Msg("Database write operation failed")
@@ -118,10 +123,11 @@ func (r *studentRepository) Update(student *model.Student) error {
 	return err
 }
 
-func (r *studentRepository) Delete(id uuid.UUID) error {
+func (r *studentRepository) Delete(c context.Context, id uuid.UUID) error {
+	repoCtx := r.WithContext(c)
 	err := r.db.Write.Delete(&model.Student{}, id).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "delete_student").
 			Msg("Database write operation failed")
@@ -129,14 +135,15 @@ func (r *studentRepository) Delete(id uuid.UUID) error {
 	return err
 }
 
-func (r *studentRepository) BulkDelete(ids []uuid.UUID) error {
+func (r *studentRepository) BulkDelete(c context.Context, ids []uuid.UUID) error {
+	repoCtx := r.WithContext(c)
 	if len(ids) == 0 {
 		return nil
 	}
 
 	err := r.db.Write.Where("id IN (?)", ids).Delete(&model.Student{}).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "bulk_delete_students").
 			Int("count", len(ids)).
@@ -145,7 +152,8 @@ func (r *studentRepository) BulkDelete(ids []uuid.UUID) error {
 	return err
 }
 
-func (r *studentRepository) List(tenantID uuid.UUID, offset, limit int, search string) ([]model.Student, int64, error) {
+func (r *studentRepository) List(c context.Context, tenantID uuid.UUID, offset, limit int, search string) ([]model.Student, int64, error) {
+	repoCtx := r.WithContext(c)
 	if err := r.SetTenantContext(tenantID); err != nil {
 		return nil, 0, err
 	}
@@ -165,7 +173,7 @@ func (r *studentRepository) List(tenantID uuid.UUID, offset, limit int, search s
 
 	// Get total count
 	if err := query.Model(&model.Student{}).Count(&total).Error; err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "count_students").
 			Msg("Database query failed")
@@ -175,7 +183,7 @@ func (r *studentRepository) List(tenantID uuid.UUID, offset, limit int, search s
 	// Get paginated results
 	err := query.Offset(offset).Limit(limit).Find(&students).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "list_students").
 			Msg("Database query failed")
@@ -183,7 +191,8 @@ func (r *studentRepository) List(tenantID uuid.UUID, offset, limit int, search s
 	return students, total, err
 }
 
-func (r *studentRepository) GetByClass(tenantID, classID uuid.UUID, offset, limit int) ([]model.Student, int64, error) {
+func (r *studentRepository) GetByClass(c context.Context, tenantID, classID uuid.UUID, offset, limit int) ([]model.Student, int64, error) {
+	repoCtx := r.WithContext(c)
 	if err := r.SetTenantContext(tenantID); err != nil {
 		return nil, 0, err
 	}
@@ -196,7 +205,7 @@ func (r *studentRepository) GetByClass(tenantID, classID uuid.UUID, offset, limi
 
 	// Get total count
 	if err := query.Model(&model.Student{}).Count(&total).Error; err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "count_students_by_class").
 			Msg("Database query failed")
@@ -206,7 +215,7 @@ func (r *studentRepository) GetByClass(tenantID, classID uuid.UUID, offset, limi
 	// Get paginated results
 	err := query.Offset(offset).Limit(limit).Find(&students).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "get_students_by_class").
 			Msg("Database query failed")
@@ -214,7 +223,8 @@ func (r *studentRepository) GetByClass(tenantID, classID uuid.UUID, offset, limi
 	return students, total, err
 }
 
-func (r *studentRepository) GetByParent(tenantID, parentID uuid.UUID, offset, limit int) ([]model.Student, int64, error) {
+func (r *studentRepository) GetByParent(c context.Context, tenantID, parentID uuid.UUID, offset, limit int) ([]model.Student, int64, error) {
+	repoCtx := r.WithContext(c)
 	if err := r.SetTenantContext(tenantID); err != nil {
 		return nil, 0, err
 	}
@@ -227,7 +237,7 @@ func (r *studentRepository) GetByParent(tenantID, parentID uuid.UUID, offset, li
 
 	// Get total count
 	if err := query.Model(&model.Student{}).Count(&total).Error; err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "count_students_by_parent").
 			Msg("Database query failed")
@@ -237,7 +247,7 @@ func (r *studentRepository) GetByParent(tenantID, parentID uuid.UUID, offset, li
 	// Get paginated results
 	err := query.Offset(offset).Limit(limit).Find(&students).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "get_students_by_parent").
 			Msg("Database query failed")

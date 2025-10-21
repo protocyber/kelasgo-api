@@ -5,6 +5,14 @@ import (
 	"github.com/protocyber/kelasgo-api/internal/infrastructure/database"
 )
 
+// TenantContextKey is the key used to store tenant ID in context
+type TenantContextKey string
+
+const (
+	XTenantIDKey       TenantContextKey = "X-Tenant-ID"
+	TenantIDRequestKey TenantContextKey = "tenant_id"
+)
+
 // TenantContextManager helps manage tenant context for database operations
 type TenantContextManager struct {
 	db *database.DatabaseConnections

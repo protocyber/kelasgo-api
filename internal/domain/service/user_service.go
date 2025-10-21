@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"math"
 
@@ -9,17 +10,16 @@ import (
 	"github.com/protocyber/kelasgo-api/internal/domain/model"
 	"github.com/protocyber/kelasgo-api/internal/domain/repository"
 	"github.com/protocyber/kelasgo-api/internal/util"
-	"github.com/rs/zerolog/log"
 )
 
 // UserService interface defines user service methods
 type UserService interface {
-	Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*model.User, error)
-	GetByID(id uuid.UUID) (*model.User, error)
-	Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.User, error)
-	Delete(id uuid.UUID) error
-	BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error
-	List(tenantID uuid.UUID, params dto.UserQueryParams) ([]model.User, *dto.PaginationMeta, error)
+	Create(c context.Context, tenantID uuid.UUID, req dto.CreateUserRequest) (*model.User, error)
+	GetByID(c context.Context, id uuid.UUID) (*model.User, error)
+	Update(c context.Context, id uuid.UUID, req dto.UpdateUserRequest) (*model.User, error)
+	Delete(c context.Context, id uuid.UUID) error
+	BulkDelete(c context.Context, tenantID uuid.UUID, ids []uuid.UUID) error
+	List(c context.Context, tenantID uuid.UUID, params dto.UserQueryParams) ([]model.User, *dto.PaginationMeta, error)
 }
 
 // userService implements UserService
@@ -45,22 +45,25 @@ func NewUserService(
 	}
 }
 
-func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*model.User, error) {
+func (s *userService) Create(c context.Context, tenantID uuid.UUID, req dto.CreateUserRequest) (*model.User, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Check if username already exists within tenant
-	existingUser, _ := s.userRepo.GetByUsernameAndTenant(req.Username, tenantID)
+	existingUser, _ := s.userRepo.GetByUsernameAndTenant(c, req.Username, tenantID)
 	if existingUser != nil {
-		log.Warn().
+		logger.Warn().
 			Str("username", req.Username).
 			Str("tenant_id", tenantID.String()).
-			Msg("User creation attempt with existing username")
+			Msg("Username already exists within tenant")
 		return nil, errors.New("username already exists")
 	}
 
 	// Check if email already exists within tenant (if provided)
 	if req.Email != "" {
-		existingUser, _ = s.userRepo.GetByEmailAndTenant(req.Email, tenantID)
+		existingUser, _ = s.userRepo.GetByEmailAndTenant(c, req.Email, tenantID)
 		if existingUser != nil {
-			log.Warn().
+			logger.Warn().
 				Str("email", req.Email).
 				Str("tenant_id", tenantID.String()).
 				Msg("User creation attempt with existing email")
@@ -70,9 +73,9 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 
 	// Validate role if provided
 	if req.RoleID != nil {
-		_, err := s.roleRepo.GetByID(*req.RoleID)
+		_, err := s.roleRepo.GetByID(c, *req.RoleID)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("role_id", req.RoleID.String()).
 				Str("tenant_id", tenantID.String()).
@@ -84,7 +87,7 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 	// Hash password
 	hashedPassword, err := util.HashPassword(req.Password)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("username", req.Username).
 			Str("tenant_id", tenantID.String()).
@@ -111,9 +114,9 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 		user.IsActive = *req.IsActive
 	}
 
-	err = s.userRepo.Create(user)
+	err = s.userRepo.Create(c, user)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("username", req.Username).
 			Str("tenant_id", tenantID.String()).
@@ -128,15 +131,15 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 		IsActive: user.IsActive,
 	}
 
-	err = s.tenantUserRepo.Create(tenantUser)
+	err = s.tenantUserRepo.Create(c, tenantUser)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", user.ID.String()).
 			Str("tenant_id", tenantID.String()).
 			Msg("Failed to create tenant-user relationship")
 		// If tenant-user creation fails, we should delete the user to maintain consistency
-		s.userRepo.Delete(user.ID)
+		s.userRepo.Delete(c, user.ID)
 		return nil, errors.New("failed to create tenant-user relationship")
 	}
 
@@ -147,16 +150,16 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 			RoleID:       *req.RoleID,
 		}
 
-		err = s.tenantUserRoleRepo.Create(tenantUserRole)
+		err = s.tenantUserRoleRepo.Create(c, tenantUserRole)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("tenant_user_id", tenantUser.ID.String()).
 				Str("role_id", req.RoleID.String()).
 				Msg("Failed to create tenant user-role relationship")
 			// If tenant user-role creation fails, cleanup user and tenant-user
-			s.tenantUserRepo.Delete(tenantUser.ID)
-			s.userRepo.Delete(user.ID)
+			s.tenantUserRepo.Delete(c, tenantUser.ID)
+			s.userRepo.Delete(c, user.ID)
 			return nil, errors.New("failed to create tenant user-role relationship")
 		}
 	}
@@ -164,23 +167,29 @@ func (s *userService) Create(tenantID uuid.UUID, req dto.CreateUserRequest) (*mo
 	return user, nil
 }
 
-func (s *userService) GetByID(id uuid.UUID) (*model.User, error) {
-	user, err := s.userRepo.GetByID(id)
+func (s *userService) GetByID(c context.Context, id uuid.UUID) (*model.User, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
+	user, err := s.userRepo.GetByID(c, id)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", id.String()).
 			Msg("Failed to get user by ID")
-		return nil, err
+		return nil, errors.New("user not found")
 	}
 	return user, nil
 }
 
-func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.User, error) {
+func (s *userService) Update(c context.Context, id uuid.UUID, req dto.UpdateUserRequest) (*model.User, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Get existing user
-	user, err := s.userRepo.GetByID(id)
+	user, err := s.userRepo.GetByID(c, id)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", id.String()).
 			Msg("User not found during update")
@@ -192,7 +201,7 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 	if len(user.TenantUsers) > 0 {
 		tenantID = user.TenantUsers[0].TenantID
 	} else {
-		log.Error().
+		logger.Error().
 			Str("user_id", id.String()).
 			Msg("User is not associated with any tenant during update")
 		return nil, errors.New("user is not associated with any tenant")
@@ -200,9 +209,9 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 
 	// Check if email already exists (if changed and provided)
 	if req.Email != nil && *req.Email != "" && *req.Email != user.Email {
-		existingUser, _ := s.userRepo.GetByEmailAndTenant(*req.Email, tenantID)
+		existingUser, _ := s.userRepo.GetByEmailAndTenant(c, *req.Email, tenantID)
 		if existingUser != nil && existingUser.ID != id {
-			log.Warn().
+			logger.Warn().
 				Str("email", *req.Email).
 				Str("user_id", id.String()).
 				Str("tenant_id", tenantID.String()).
@@ -213,9 +222,9 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 
 	// Handle role update if provided
 	if req.RoleID != nil {
-		_, err := s.roleRepo.GetByID(*req.RoleID)
+		_, err := s.roleRepo.GetByID(c, *req.RoleID)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("role_id", req.RoleID.String()).
 				Str("user_id", id.String()).
@@ -224,9 +233,9 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 		}
 
 		// Get tenant user
-		tenantUser, err := s.tenantUserRepo.GetByTenantAndUser(tenantID, user.ID)
+		tenantUser, err := s.tenantUserRepo.GetByTenantAndUser(c, tenantID, user.ID)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("user_id", id.String()).
 				Str("tenant_id", tenantID.String()).
@@ -235,9 +244,9 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 		}
 
 		// Delete existing tenant user roles and create new one
-		err = s.tenantUserRoleRepo.DeleteAllTenantUserRoles(tenantUser.ID)
+		err = s.tenantUserRoleRepo.DeleteAllTenantUserRoles(c, tenantUser.ID)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("tenant_user_id", tenantUser.ID.String()).
 				Msg("Failed to delete existing tenant user roles during update")
@@ -249,9 +258,9 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 			RoleID:       *req.RoleID,
 		}
 
-		err = s.tenantUserRoleRepo.Create(tenantUserRole)
+		err = s.tenantUserRoleRepo.Create(c, tenantUserRole)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("tenant_user_id", tenantUser.ID.String()).
 				Str("role_id", req.RoleID.String()).
@@ -292,9 +301,9 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 		if len(user.TenantUsers) > 0 {
 			tenantUser := &user.TenantUsers[0]
 			tenantUser.IsActive = *req.IsActive
-			err = s.tenantUserRepo.Update(tenantUser)
+			err = s.tenantUserRepo.Update(c, tenantUser)
 			if err != nil {
-				log.Error().
+				logger.Error().
 					Err(err).
 					Str("user_id", id.String()).
 					Str("tenant_id", tenantID.String()).
@@ -304,9 +313,9 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 		}
 	}
 
-	err = s.userRepo.Update(user)
+	err = s.userRepo.Update(c, user)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", id.String()).
 			Msg("Failed to update user in database")
@@ -316,20 +325,23 @@ func (s *userService) Update(id uuid.UUID, req dto.UpdateUserRequest) (*model.Us
 	return user, nil
 }
 
-func (s *userService) Delete(id uuid.UUID) error {
+func (s *userService) Delete(c context.Context, id uuid.UUID) error {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Check if user exists
-	_, err := s.userRepo.GetByID(id)
+	_, err := s.userRepo.GetByID(c, id)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", id.String()).
 			Msg("User not found during delete")
 		return err
 	}
 
-	err = s.userRepo.Delete(id)
+	err = s.userRepo.Delete(c, id)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", id.String()).
 			Msg("Failed to delete user from database")
@@ -339,15 +351,18 @@ func (s *userService) Delete(id uuid.UUID) error {
 	return nil
 }
 
-func (s *userService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
+func (s *userService) BulkDelete(c context.Context, tenantID uuid.UUID, ids []uuid.UUID) error {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	if len(ids) == 0 {
 		return errors.New("no user IDs provided for bulk delete")
 	}
 
 	// Get users that belong to the tenant to validate they exist and log properly
-	users, _, err := s.userRepo.GetUsersByTenant(tenantID, 0, len(ids)*2, "")
+	users, _, err := s.userRepo.GetUsersByTenant(c, tenantID, 0, len(ids)*2, "")
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("tenant_id", tenantID.String()).
 			Interface("user_ids", ids).
@@ -373,7 +388,7 @@ func (s *userService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
 	}
 
 	if len(invalidIDs) > 0 {
-		log.Warn().
+		logger.Warn().
 			Str("tenant_id", tenantID.String()).
 			Interface("invalid_ids", invalidIDs).
 			Msg("Some user IDs do not belong to the tenant or do not exist")
@@ -384,9 +399,9 @@ func (s *userService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
 	}
 
 	// Perform bulk delete
-	err = s.userRepo.BulkDelete(validIDs)
+	err = s.userRepo.BulkDelete(c, validIDs)
 	if err != nil {
-		log.Error().
+		logger.Error().
 			Err(err).
 			Str("tenant_id", tenantID.String()).
 			Interface("user_ids", validIDs).
@@ -397,7 +412,10 @@ func (s *userService) BulkDelete(tenantID uuid.UUID, ids []uuid.UUID) error {
 	return nil
 }
 
-func (s *userService) List(tenantID uuid.UUID, params dto.UserQueryParams) ([]model.User, *dto.PaginationMeta, error) {
+func (s *userService) List(c context.Context, tenantID uuid.UUID, params dto.UserQueryParams) ([]model.User, *dto.PaginationMeta, error) {
+	// Create context logger for service
+	logger := util.NewServiceLogger(c)
+
 	// Set defaults
 	if params.Page < 1 {
 		params.Page = 1
@@ -413,9 +431,9 @@ func (s *userService) List(tenantID uuid.UUID, params dto.UserQueryParams) ([]mo
 	var err error
 
 	if params.RoleID != nil {
-		users, total, err = s.userRepo.GetByRole(tenantID, *params.RoleID, offset, params.Limit)
+		users, total, err = s.userRepo.GetByRole(c, tenantID, *params.RoleID, offset, params.Limit)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("tenant_id", tenantID.String()).
 				Str("role_id", params.RoleID.String()).
@@ -423,9 +441,9 @@ func (s *userService) List(tenantID uuid.UUID, params dto.UserQueryParams) ([]mo
 				Msg("Failed to get users by role")
 		}
 	} else {
-		users, total, err = s.userRepo.GetUsersByTenant(tenantID, offset, params.Limit, params.Search)
+		users, total, err = s.userRepo.GetUsersByTenant(c, tenantID, offset, params.Limit, params.Search)
 		if err != nil {
-			log.Error().
+			logger.Error().
 				Err(err).
 				Str("tenant_id", tenantID.String()).
 				Interface("params", params).

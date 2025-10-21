@@ -23,7 +23,7 @@ type PGConnectionConfig = struct {
 
 type JWTConfig = struct {
 	Secret     string `mapstructure:"secret"`
-	ExpireTime int    `mapstructure:"expire_time"`
+	ExpireTime int    `mapstructure:"expire_time"` // in hours
 }
 
 type CORSConfig = struct {
@@ -149,7 +149,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("cache.redis.primary.port", 6379)
 	viper.SetDefault("cache.redis.primary.db", 1)
 
-	viper.SetDefault("jwt.expire_time", 24)
+	viper.SetDefault("jwt.expire_time", 24) // in hours
 
 	// Read from YAML config file
 	viper.SetConfigName("config")
@@ -179,7 +179,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
-	// Set JWT expire time manually if not set
+	// Set JWT expire time (in hours) manually if not set
 	if cfg.JWT.ExpireTime == 0 {
 		cfg.JWT.ExpireTime = 24
 	}

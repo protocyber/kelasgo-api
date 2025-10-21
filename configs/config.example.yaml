@@ -28,6 +28,7 @@ server:
 
 jwt:
   secret: 'your-jwt-secret-key-change-in-production'
+  expire_time: 24 # Expiration time in hours
 
 cache:
   redis:

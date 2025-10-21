@@ -4,14 +4,8 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/config"
 	"github.com/protocyber/kelasgo-api/internal/util"
-)
-
-const (
-	// RequestIDHeader is the header key for request ID
-	RequestIDHeader = "X-Request-ID"
 )
 
 // AppContextMiddleware injects application context into request context
@@ -30,51 +24,33 @@ func AppContextMiddleware(cfg *config.Config) gin.HandlerFunc {
 		ctx := util.WithAppContext(c.Request.Context(), appCtx)
 		c.Request = c.Request.WithContext(ctx)
 
-		requestID := getRequestID(c)
-
 		// Also make it available directly in gin context for convenience
-		c.Set("app_context", appCtx)
-		c.Set("app_config", cfg)
-		c.Set("app_url", cfg.App.URL)
-		c.Set("timezone", cfg.App.Timezone)
-		c.Set("locale", cfg.App.Locale)
+		c.Set(string(util.AppContextKey), appCtx)
 
-		// Set request ID in context
-		c.Set(util.RequestIDKey, requestID)
+		// Create and set context logger
+		logger := util.NewContextLogger(c)
+		c.Set("context_logger", logger)
 
 		c.Next()
 	}
 }
 
-func getRequestID(c *gin.Context) string {
-	// Check if request ID already exists in header
-	requestID := c.GetHeader(RequestIDHeader)
-
-	// If not, generate a new one
-	if requestID == "" {
-		requestID = uuid.New().String()
-	}
-
-	// Set request ID in response header
-	c.Header(RequestIDHeader, requestID)
-
-	return requestID
-}
-
 // GetAppContext is a helper to get app context from gin context
 func GetAppContext(c *gin.Context) (*util.AppContext, bool) {
-	appCtx, exists := c.Get("app_context")
+	appCtx, exists := c.Get(string(util.AppContextKey))
 	if !exists {
 		return nil, false
 	}
 	return appCtx.(*util.AppContext), true
 }
 
-// GetAppConfig is a helper to get app config from gin context
-func GetAppConfig(c *gin.Context) (*config.Config, bool) {
-	cfg, exists := c.Get("app_config")
-	if !exists {
-		return nil, false
+// GetContextLogger helper function to extract logger from gin context
+func GetContextLogger(c *gin.Context) *util.ContextLogger {
+	if logger, exists := c.Get("context_logger"); exists {
+		if contextLogger, ok := logger.(*util.ContextLogger); ok {
+			return contextLogger
+		}
 	}
-	return cfg.(*config.Config), true
+	// Fallback to creating new logger
+	return util.NewContextLogger(c)
 }

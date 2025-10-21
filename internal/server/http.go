@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/protocyber/kelasgo-api/internal/app"
+	request_id "github.com/protocyber/kelasgo-api/pkg/gin-request-id"
 	"github.com/rs/zerolog/log"
 )
 
@@ -30,7 +31,9 @@ func NewHTTPServer(app *app.App, setupRoutes SetupRoutesFunc) *HTTPServer {
 
 	// Create Gin router
 	g := gin.New()
-	g.Use(gin.Logger())
+	g.Use(gin.Recovery())
+	g.Use(gin.LoggerWithConfig(request_id.GetLoggerConfig(nil, nil, nil)))
+	// g.Use(gin.Logger())
 
 	// Setup routes
 	setupRoutes(g, app)

@@ -1,27 +1,27 @@
 package repository
 
 import (
+	"context"
 	"errors"
 
 	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/domain/model"
 	"github.com/protocyber/kelasgo-api/internal/infrastructure/database"
-	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
 // TenantUserRepository interface defines tenant user repository methods
 type TenantUserRepository interface {
-	Create(tenantUser *model.TenantUser) error
-	GetByID(id uuid.UUID) (*model.TenantUser, error)
-	GetByTenantAndUser(tenantID, userID uuid.UUID) (*model.TenantUser, error)
-	GetByTenant(tenantID uuid.UUID, offset, limit int) ([]model.TenantUser, int64, error)
-	GetByUser(userID uuid.UUID, offset, limit int) ([]model.TenantUser, int64, error)
-	Update(tenantUser *model.TenantUser) error
-	Delete(id uuid.UUID) error
-	BulkDelete(ids []uuid.UUID) error
-	ActivateUser(tenantID, userID uuid.UUID) error
-	DeactivateUser(tenantID, userID uuid.UUID) error
+	Create(c context.Context, tenantUser *model.TenantUser) error
+	GetByID(c context.Context, id uuid.UUID) (*model.TenantUser, error)
+	GetByTenantAndUser(c context.Context, tenantID, userID uuid.UUID) (*model.TenantUser, error)
+	GetByTenant(c context.Context, tenantID uuid.UUID, offset, limit int) ([]model.TenantUser, int64, error)
+	GetByUser(c context.Context, userID uuid.UUID, offset, limit int) ([]model.TenantUser, int64, error)
+	Update(c context.Context, tenantUser *model.TenantUser) error
+	Delete(c context.Context, id uuid.UUID) error
+	BulkDelete(c context.Context, ids []uuid.UUID) error
+	ActivateUser(c context.Context, tenantID, userID uuid.UUID) error
+	DeactivateUser(c context.Context, tenantID, userID uuid.UUID) error
 }
 
 // tenantUserRepository implements TenantUserRepository
@@ -36,13 +36,14 @@ func NewTenantUserRepository(db *database.DatabaseConnections) TenantUserReposit
 	}
 }
 
-func (r *tenantUserRepository) Create(tenantUser *model.TenantUser) error {
+func (r *tenantUserRepository) Create(c context.Context, tenantUser *model.TenantUser) error {
+	repoCtx := r.WithContext(c)
 	if err := r.SetTenantContext(tenantUser.TenantID); err != nil {
 		return err
 	}
 	err := r.db.Write.Create(tenantUser).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "create_tenant_user").
 			Msg("Database write operation failed")
@@ -50,7 +51,7 @@ func (r *tenantUserRepository) Create(tenantUser *model.TenantUser) error {
 	return err
 }
 
-func (r *tenantUserRepository) GetByID(id uuid.UUID) (*model.TenantUser, error) {
+func (r *tenantUserRepository) GetByID(c context.Context, id uuid.UUID) (*model.TenantUser, error) {
 	var tenantUser model.TenantUser
 	err := r.db.Read.Preload("User").Preload("Teacher").Preload("Student").First(&tenantUser, id).Error
 	if err != nil {
@@ -62,7 +63,7 @@ func (r *tenantUserRepository) GetByID(id uuid.UUID) (*model.TenantUser, error) 
 	return &tenantUser, nil
 }
 
-func (r *tenantUserRepository) GetByTenantAndUser(tenantID, userID uuid.UUID) (*model.TenantUser, error) {
+func (r *tenantUserRepository) GetByTenantAndUser(c context.Context, tenantID, userID uuid.UUID) (*model.TenantUser, error) {
 	if err := r.SetTenantContext(tenantID); err != nil {
 		return nil, err
 	}
@@ -79,7 +80,7 @@ func (r *tenantUserRepository) GetByTenantAndUser(tenantID, userID uuid.UUID) (*
 	return &tenantUser, nil
 }
 
-func (r *tenantUserRepository) GetByTenant(tenantID uuid.UUID, offset, limit int) ([]model.TenantUser, int64, error) {
+func (r *tenantUserRepository) GetByTenant(c context.Context, tenantID uuid.UUID, offset, limit int) ([]model.TenantUser, int64, error) {
 	if err := r.SetTenantContext(tenantID); err != nil {
 		return nil, 0, err
 	}
@@ -101,7 +102,7 @@ func (r *tenantUserRepository) GetByTenant(tenantID uuid.UUID, offset, limit int
 	return tenantUsers, count, nil
 }
 
-func (r *tenantUserRepository) GetByUser(userID uuid.UUID, offset, limit int) ([]model.TenantUser, int64, error) {
+func (r *tenantUserRepository) GetByUser(c context.Context, userID uuid.UUID, offset, limit int) ([]model.TenantUser, int64, error) {
 	var tenantUsers []model.TenantUser
 	var count int64
 
@@ -119,13 +120,14 @@ func (r *tenantUserRepository) GetByUser(userID uuid.UUID, offset, limit int) ([
 	return tenantUsers, count, nil
 }
 
-func (r *tenantUserRepository) Update(tenantUser *model.TenantUser) error {
+func (r *tenantUserRepository) Update(c context.Context, tenantUser *model.TenantUser) error {
+	repoCtx := r.WithContext(c)
 	if err := r.SetTenantContext(tenantUser.TenantID); err != nil {
 		return err
 	}
 	err := r.db.Write.Save(tenantUser).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "update_tenant_user").
 			Msg("Database write operation failed")
@@ -133,18 +135,20 @@ func (r *tenantUserRepository) Update(tenantUser *model.TenantUser) error {
 	return err
 }
 
-func (r *tenantUserRepository) Delete(id uuid.UUID) error {
+func (r *tenantUserRepository) Delete(c context.Context, id uuid.UUID) error {
+	// repoCtx := r.WithContext(c)
 	return r.db.Write.Delete(&model.TenantUser{}, id).Error
 }
 
-func (r *tenantUserRepository) BulkDelete(ids []uuid.UUID) error {
+func (r *tenantUserRepository) BulkDelete(c context.Context, ids []uuid.UUID) error {
+	repoCtx := r.WithContext(c)
 	if len(ids) == 0 {
 		return nil
 	}
 
 	err := r.db.Write.Where("id IN (?)", ids).Delete(&model.TenantUser{}).Error
 	if err != nil {
-		log.Error().
+		repoCtx.logger.Error().
 			Err(err).
 			Str("operation", "bulk_delete_tenant_users").
 			Int("count", len(ids)).
@@ -153,7 +157,8 @@ func (r *tenantUserRepository) BulkDelete(ids []uuid.UUID) error {
 	return err
 }
 
-func (r *tenantUserRepository) ActivateUser(tenantID, userID uuid.UUID) error {
+func (r *tenantUserRepository) ActivateUser(c context.Context, tenantID, userID uuid.UUID) error {
+	// repoCtx := r.WithContext(c)
 	if err := r.SetTenantContext(tenantID); err != nil {
 		return err
 	}
@@ -163,7 +168,8 @@ func (r *tenantUserRepository) ActivateUser(tenantID, userID uuid.UUID) error {
 		Update("is_active", true).Error
 }
 
-func (r *tenantUserRepository) DeactivateUser(tenantID, userID uuid.UUID) error {
+func (r *tenantUserRepository) DeactivateUser(c context.Context, tenantID, userID uuid.UUID) error {
+	// repoCtx := r.WithContext(c)
 	if err := r.SetTenantContext(tenantID); err != nil {
 		return err
 	}

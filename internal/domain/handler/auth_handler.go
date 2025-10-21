@@ -5,9 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
 	"github.com/protocyber/kelasgo-api/internal/domain/dto"
 	"github.com/protocyber/kelasgo-api/internal/domain/service"
+	"github.com/protocyber/kelasgo-api/internal/util"
 )
 
 // AuthHandler handles authentication related requests
@@ -18,8 +18,9 @@ type AuthHandler struct {
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(authService service.AuthService, validator *validator.Validate) *AuthHandler {
+func NewAuthHandler(authService service.AuthService, validator *validator.Validate, appCtx *util.AppContext) *AuthHandler {
 	return &AuthHandler{
+		BaseHandler: NewBaseHandler(appCtx),
 		authService: authService,
 		validator:   validator,
 	}
@@ -27,11 +28,11 @@ func NewAuthHandler(authService service.AuthService, validator *validator.Valida
 
 // Login handles user login
 func (h *AuthHandler) Login(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Failed to bind login request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -43,7 +44,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Str("email", req.Email).
 			Msg("Login request validation failed")
@@ -55,7 +56,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	response, err := h.authService.Login(req)
+	serviceCtx := h.CreateServiceContext(c)
+	response, err := h.authService.Login(serviceCtx, req)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, dto.Response{
 			Success: false,
@@ -74,11 +76,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 // Register handles user registration
 func (h *AuthHandler) Register(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Failed to bind registration request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -90,7 +92,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Str("username", req.Username).
 			Str("email", req.Email).
@@ -103,7 +105,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.Register(req)
+	serviceCtx := h.CreateServiceContext(c)
+	user, err := h.authService.Register(serviceCtx, req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -122,14 +125,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 // ChangePassword handles password change
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
-	userIDInterface, exists := c.Get("user_id")
-	if !exists || userIDInterface == nil {
-		h.log.Error().
-			Bool("exists", exists).
-			Interface("user_id", userIDInterface).
-			Msg("User ID not found in context during password change")
+	userID, exists := h.ValidateUserID(c)
+	if !exists {
 		c.JSON(http.StatusUnauthorized, dto.Response{
 			Success: false,
 			Message: "Unauthorized",
@@ -138,22 +137,9 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	userID, ok := userIDInterface.(uuid.UUID)
-	if !ok {
-		h.log.Error().
-			Interface("user_id", userIDInterface).
-			Msg("Invalid user ID format in context during password change")
-		c.JSON(http.StatusUnauthorized, dto.Response{
-			Success: false,
-			Message: "Unauthorized",
-			Error:   "Invalid user ID format in context",
-		})
-		return
-	}
-
 	var req dto.ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", userID.String()).
 			Msg("Failed to bind change password request JSON")
@@ -166,7 +152,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Str("user_id", userID.String()).
 			Msg("Change password request validation failed")
@@ -178,7 +164,8 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	err := h.authService.ChangePassword(userID, req)
+	serviceCtx := h.CreateServiceContext(c)
+	err := h.authService.ChangePassword(serviceCtx, userID, req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -196,14 +183,10 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 // SelectTenant handles tenant selection after authentication
 func (h *AuthHandler) SelectTenant(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
-	userIDInterface, exists := c.Get("user_id")
-	if !exists || userIDInterface == nil {
-		h.log.Error().
-			Bool("exists", exists).
-			Interface("user_id", userIDInterface).
-			Msg("User ID not found in context during tenant selection")
+	userID, exists := h.ValidateUserID(c)
+	if !exists {
 		c.JSON(http.StatusUnauthorized, dto.Response{
 			Success: false,
 			Message: "Unauthorized",
@@ -212,22 +195,9 @@ func (h *AuthHandler) SelectTenant(c *gin.Context) {
 		return
 	}
 
-	userID, ok := userIDInterface.(uuid.UUID)
-	if !ok {
-		h.log.Error().
-			Interface("user_id", userIDInterface).
-			Msg("Invalid user ID format in context during tenant selection")
-		c.JSON(http.StatusUnauthorized, dto.Response{
-			Success: false,
-			Message: "Unauthorized",
-			Error:   "Invalid user ID format in context",
-		})
-		return
-	}
-
 	var req dto.TenantSelectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("user_id", userID.String()).
 			Msg("Failed to bind tenant selection request JSON")
@@ -240,7 +210,7 @@ func (h *AuthHandler) SelectTenant(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Str("user_id", userID.String()).
 			Str("tenant_id", req.TenantID).
@@ -253,7 +223,8 @@ func (h *AuthHandler) SelectTenant(c *gin.Context) {
 		return
 	}
 
-	response, err := h.authService.SelectTenant(userID, req)
+	serviceCtx := h.CreateServiceContext(c)
+	response, err := h.authService.SelectTenant(serviceCtx, userID, req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -272,14 +243,10 @@ func (h *AuthHandler) SelectTenant(c *gin.Context) {
 
 // GetUserTenants handles getting all tenants for the authenticated user
 func (h *AuthHandler) GetUserTenants(c *gin.Context) {
-	h.InitLogger(c)
+	// logger := h.GetLogger(c)
 
-	userIDInterface, exists := c.Get("user_id")
-	if !exists || userIDInterface == nil {
-		h.log.Error().
-			Bool("exists", exists).
-			Interface("user_id", userIDInterface).
-			Msg("User ID not found in context during get user tenants")
+	userID, exists := h.ValidateUserID(c)
+	if !exists {
 		c.JSON(http.StatusUnauthorized, dto.Response{
 			Success: false,
 			Message: "Unauthorized",
@@ -288,20 +255,8 @@ func (h *AuthHandler) GetUserTenants(c *gin.Context) {
 		return
 	}
 
-	userID, ok := userIDInterface.(uuid.UUID)
-	if !ok {
-		h.log.Error().
-			Interface("user_id", userIDInterface).
-			Msg("Invalid user ID format in context during get user tenants")
-		c.JSON(http.StatusUnauthorized, dto.Response{
-			Success: false,
-			Message: "Unauthorized",
-			Error:   "Invalid user ID format in context",
-		})
-		return
-	}
-
-	tenants, err := h.authService.GetUserTenants(userID)
+	serviceCtx := h.CreateServiceContext(c)
+	tenants, err := h.authService.GetUserTenants(serviceCtx, userID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,

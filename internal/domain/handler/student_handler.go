@@ -9,6 +9,7 @@ import (
 	"github.com/protocyber/kelasgo-api/internal/domain/dto"
 	"github.com/protocyber/kelasgo-api/internal/domain/service"
 	"github.com/protocyber/kelasgo-api/internal/server/middleware"
+	"github.com/protocyber/kelasgo-api/internal/util"
 )
 
 // StudentHandler handles student related requests
@@ -19,8 +20,9 @@ type StudentHandler struct {
 }
 
 // NewStudentHandler creates a new student handler
-func NewStudentHandler(studentService service.StudentService, validator *validator.Validate) *StudentHandler {
+func NewStudentHandler(studentService service.StudentService, validator *validator.Validate, appCtx *util.AppContext) *StudentHandler {
 	return &StudentHandler{
+		BaseHandler:    NewBaseHandler(appCtx),
 		studentService: studentService,
 		validator:      validator,
 	}
@@ -28,11 +30,11 @@ func NewStudentHandler(studentService service.StudentService, validator *validat
 
 // Create handles student creation
 func (h *StudentHandler) Create(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	var req dto.CreateStudentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Failed to bind create student request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -44,7 +46,7 @@ func (h *StudentHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Str("student_number", req.StudentNumber).
 			Str("tenant_user_id", req.TenantUserID.String()).
@@ -60,7 +62,7 @@ func (h *StudentHandler) Create(c *gin.Context) {
 	// Get tenant ID from middleware context
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == uuid.Nil {
-		h.log.Error().
+		logger.Error().
 			Str("student_number", req.StudentNumber).
 			Msg("Student creation attempt without valid tenant ID")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -71,7 +73,8 @@ func (h *StudentHandler) Create(c *gin.Context) {
 		return
 	}
 
-	student, err := h.studentService.Create(tenantID, req)
+	serviceCtx := h.CreateServiceContext(c)
+	student, err := h.studentService.Create(serviceCtx, tenantID, req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -90,12 +93,12 @@ func (h *StudentHandler) Create(c *gin.Context) {
 
 // GetByID handles getting student by ID
 func (h *StudentHandler) GetByID(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("id_param", idStr).
 			Msg("Invalid student ID format in get request")
@@ -107,7 +110,8 @@ func (h *StudentHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	student, err := h.studentService.GetByID(id)
+	serviceCtx := h.CreateServiceContext(c)
+	student, err := h.studentService.GetByID(serviceCtx, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, dto.Response{
 			Success: false,
@@ -126,12 +130,12 @@ func (h *StudentHandler) GetByID(c *gin.Context) {
 
 // Update handles student update
 func (h *StudentHandler) Update(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("id_param", idStr).
 			Msg("Invalid student ID format in update request")
@@ -145,7 +149,7 @@ func (h *StudentHandler) Update(c *gin.Context) {
 
 	var req dto.UpdateStudentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("student_id", id.String()).
 			Msg("Failed to bind update student request JSON")
@@ -158,7 +162,7 @@ func (h *StudentHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Str("student_id", id.String()).
 			Msg("Update student request validation failed")
@@ -170,7 +174,8 @@ func (h *StudentHandler) Update(c *gin.Context) {
 		return
 	}
 
-	student, err := h.studentService.Update(id, req)
+	serviceCtx := h.CreateServiceContext(c)
+	student, err := h.studentService.Update(serviceCtx, id, req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -189,12 +194,12 @@ func (h *StudentHandler) Update(c *gin.Context) {
 
 // Delete handles student deletion
 func (h *StudentHandler) Delete(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("id_param", idStr).
 			Msg("Invalid student ID format in delete request")
@@ -206,7 +211,8 @@ func (h *StudentHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	err = h.studentService.Delete(id)
+	serviceCtx := h.CreateServiceContext(c)
+	err = h.studentService.Delete(serviceCtx, id)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -224,11 +230,11 @@ func (h *StudentHandler) Delete(c *gin.Context) {
 
 // BulkDelete handles bulk student deletion
 func (h *StudentHandler) BulkDelete(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	var req dto.BulkDeleteStudentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Failed to bind bulk delete student request JSON")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -240,7 +246,7 @@ func (h *StudentHandler) BulkDelete(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Interface("student_ids", req.IDs).
 			Msg("Bulk delete student request validation failed")
@@ -255,7 +261,7 @@ func (h *StudentHandler) BulkDelete(c *gin.Context) {
 	// Get tenant ID from middleware context
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == uuid.Nil {
-		h.log.Error().
+		logger.Error().
 			Interface("student_ids", req.IDs).
 			Msg("Bulk delete students attempt without valid tenant ID")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -266,7 +272,8 @@ func (h *StudentHandler) BulkDelete(c *gin.Context) {
 		return
 	}
 
-	err := h.studentService.BulkDelete(tenantID, req.IDs)
+	serviceCtx := h.CreateServiceContext(c)
+	err := h.studentService.BulkDelete(serviceCtx, tenantID, req.IDs)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -284,11 +291,11 @@ func (h *StudentHandler) BulkDelete(c *gin.Context) {
 
 // List handles student listing with pagination
 func (h *StudentHandler) List(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	var params dto.StudentQueryParams
 	if err := c.ShouldBindQuery(&params); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Failed to bind student list query parameters")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -300,7 +307,7 @@ func (h *StudentHandler) List(c *gin.Context) {
 	}
 
 	if err := h.validator.Struct(params); err != nil {
-		h.log.Warn().
+		logger.Warn().
 			Err(err).
 			Interface("params", params).
 			Msg("Student list query parameters validation failed")
@@ -315,7 +322,7 @@ func (h *StudentHandler) List(c *gin.Context) {
 	// Get tenant ID from middleware context
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == uuid.Nil {
-		h.log.Error().
+		logger.Error().
 			Msg("Student listing attempt without valid tenant ID")
 		c.JSON(http.StatusBadRequest, dto.Response{
 			Success: false,
@@ -325,7 +332,8 @@ func (h *StudentHandler) List(c *gin.Context) {
 		return
 	}
 
-	students, meta, err := h.studentService.List(tenantID, params)
+	serviceCtx := h.CreateServiceContext(c)
+	students, meta, err := h.studentService.List(serviceCtx, tenantID, params)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Response{
 			Success: false,
@@ -345,12 +353,12 @@ func (h *StudentHandler) List(c *gin.Context) {
 
 // GetByClass handles getting students by class ID
 func (h *StudentHandler) GetByClass(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	classIDStr := c.Param("class_id")
 	classID, err := uuid.Parse(classIDStr)
 	if err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("class_id_param", classIDStr).
 			Msg("Invalid class ID format in get students by class request")
@@ -364,7 +372,7 @@ func (h *StudentHandler) GetByClass(c *gin.Context) {
 
 	var params dto.QueryParams
 	if err := c.ShouldBindQuery(&params); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Failed to bind query parameters for students by class")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -378,7 +386,7 @@ func (h *StudentHandler) GetByClass(c *gin.Context) {
 	// Get tenant ID from middleware context
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == uuid.Nil {
-		h.log.Error().
+		logger.Error().
 			Str("class_id", classID.String()).
 			Msg("Get students by class attempt without valid tenant ID")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -389,7 +397,8 @@ func (h *StudentHandler) GetByClass(c *gin.Context) {
 		return
 	}
 
-	students, meta, err := h.studentService.GetByClass(tenantID, classID, params)
+	serviceCtx := h.CreateServiceContext(c)
+	students, meta, err := h.studentService.GetByClass(serviceCtx, tenantID, classID, params)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Response{
 			Success: false,
@@ -409,12 +418,12 @@ func (h *StudentHandler) GetByClass(c *gin.Context) {
 
 // GetByParent handles getting students by parent ID
 func (h *StudentHandler) GetByParent(c *gin.Context) {
-	h.InitLogger(c)
+	logger := h.GetLogger(c)
 
 	parentIDStr := c.Param("parent_id")
 	parentID, err := uuid.Parse(parentIDStr)
 	if err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Str("parent_id_param", parentIDStr).
 			Msg("Invalid parent ID format in get students by parent request")
@@ -428,7 +437,7 @@ func (h *StudentHandler) GetByParent(c *gin.Context) {
 
 	var params dto.QueryParams
 	if err := c.ShouldBindQuery(&params); err != nil {
-		h.log.Error().
+		logger.Error().
 			Err(err).
 			Msg("Failed to bind query parameters for students by parent")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -442,7 +451,7 @@ func (h *StudentHandler) GetByParent(c *gin.Context) {
 	// Get tenant ID from middleware context
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == uuid.Nil {
-		h.log.Error().
+		logger.Error().
 			Str("parent_id", parentID.String()).
 			Msg("Get students by parent attempt without valid tenant ID")
 		c.JSON(http.StatusBadRequest, dto.Response{
@@ -453,7 +462,8 @@ func (h *StudentHandler) GetByParent(c *gin.Context) {
 		return
 	}
 
-	students, meta, err := h.studentService.GetByParent(tenantID, parentID, params)
+	serviceCtx := h.CreateServiceContext(c)
+	students, meta, err := h.studentService.GetByParent(serviceCtx, tenantID, parentID, params)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.Response{
 			Success: false,

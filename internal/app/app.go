@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/protocyber/kelasgo-api/internal/config"
 	"github.com/protocyber/kelasgo-api/internal/domain/handler"
@@ -44,6 +46,12 @@ func NewApp() (*App, error) {
 	}
 	jwtService := util.NewJWTService(jwtConfig)
 
+	// Create app context
+	appCtx, err := util.NewAppContext(context.Background(), cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(dbConns)
 	roleRepo := repository.NewRoleRepository(dbConns)
@@ -57,9 +65,9 @@ func NewApp() (*App, error) {
 	studentService := service.NewStudentService(studentRepo, tenantUserRepo)
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(authService, validator)
-	userHandler := handler.NewUserHandler(userService, validator)
-	studentHandler := handler.NewStudentHandler(studentService, validator)
+	authHandler := handler.NewAuthHandler(authService, validator, appCtx)
+	userHandler := handler.NewUserHandler(userService, validator, appCtx)
+	studentHandler := handler.NewStudentHandler(studentService, validator, appCtx)
 
 	// Create and return the app
 	return &App{
